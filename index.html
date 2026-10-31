@@ -61,6 +61,7 @@ main{padding:14px 16px 0}
 }
 .title{flex:1;min-width:0}
 .title b{display:block;font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.title b .nt{font-weight:400;font-size:13px;color:var(--dim)}
 .title .no{font-size:12px;color:var(--dim2);font-family:ui-monospace,Menlo,Consolas,monospace;margin-top:2px;letter-spacing:.3px}
 .status{font-size:12px;padding:4px 10px;border-radius:999px;background:#24304a;color:#9db8ff;white-space:nowrap}
 .status.delivered{background:#17351f;color:#6ee7a0}
@@ -152,7 +153,7 @@ main{padding:14px 16px 0}
   <div class="panel">
     <h2><span id="editTitle">添加包裹</span><button class="x" data-close>取消</button></h2>
     <div class="field"><label>内容物 / 名称</label><input id="f_name" placeholder="例：恋人不行 5-8"></div>
-    <div class="field"><label>快递单号</label><input id="f_no" placeholder="EB123456789TW" autocapitalize="characters"></div>
+    <div class="field"><label>快递单号</label><input id="f_no" placeholder="通过购物软件获取" autocapitalize="characters"></div>
     <div class="row2">
       <div class="field"><label>平台</label>
         <select id="f_platform">
@@ -168,7 +169,7 @@ main{padding:14px 16px 0}
       </div>
     </div>
     <div class="field"><label>取件码（大多留空，到站会自动填）</label><input id="f_pickup" placeholder="6-4-12003"></div>
-    <div class="field"><label>备注</label><textarea id="f_note" placeholder="放哪个驿站 / 给谁的 / 多少钱"></textarea></div>
+    <div class="field"><label>备注（可留空）</label><textarea id="f_note" placeholder="放哪个驿站 / 给谁的 / 多少钱"></textarea></div>
     <button class="primary" id="saveItem">保存</button>
     <button class="ghost danger" id="delItem" style="display:none">删除这个包裹</button>
   </div>
@@ -363,7 +364,7 @@ main{padding:14px 16px 0}
         <div class="top">
           <span class="pf">${esc(PLATFORM_NAME[it.platform] || '其他')}</span>
           <div class="title">
-            <b>${esc(it.name || it.no || '未命名')}</b>
+            <b>${esc(it.name || it.no || '未命名')}${it.note ? `<span class="nt">&nbsp;&nbsp;备注：${esc(String(it.note).replace(/\s+/g, ' '))}</span>` : ''}</b>
             ${it.no ? `<div class="no">${esc(it.no)}</div>` : ''}
           </div>
           <span class="status ${st}">${esc(STATUS_NAME[st] || st)}</span>
