@@ -252,8 +252,8 @@ main{padding:14px 16px 0}
       <div class="field"><label>家庭码（只同步下面那个分组的包裹）</label>
         <input id="s_room" placeholder="房间码，比如 7Q2K9M" autocapitalize="characters">
       </div>
-      <div class="field"><label>家庭码绑定的分组名</label>
-        <input id="s_roomGroup" placeholder="比如：家里">
+      <div class="field"><label>家庭码绑定的分组名（可留空）</label>
+        <input id="s_roomGroup" placeholder="默认跟随命名者">
       </div>
       <div style="display:flex;gap:10px">
         <button class="ghost" id="genRoom">随机生成房间码</button>
@@ -877,7 +877,7 @@ main{padding:14px 16px 0}
       el.textContent = '没设房间码，只有本机有数据。填一个相同的房间码，家人的手机就会看到同一份列表。';
       return;
     }
-    el.textContent = `房间 ${room}` + (db.settings.roomGroup ? ` · 只同步「${db.settings.roomGroup}」分组` : ' · 还没绑定分组')
+    el.textContent = `房间 ${room}` + (db.settings.roomGroup ? ` · 只同步「${db.settings.roomGroup}」分组` : ' · 分组名为空，跟随命名者')
       + (lastSync ? ` · 上次同步 ${relTime(lastSync)}` : '');
   }
 
@@ -891,9 +891,6 @@ main{padding:14px 16px 0}
     const room = roomCode();
     if (!room) { if (!silent) toast('先在设置里填房间码'); return; }
     if (syncing) return;
-    const roomGroup = (db.settings.roomGroup || '').trim();
-    const inRoom = (it) => (roomGroup ? itemInGroup(it, roomGroup) : false);
-
     syncing = true;
     try {
       const base = (db.settings.base || location.origin).replace(/\/$/, '');
@@ -901,7 +898,28 @@ main{padding:14px 16px 0}
       url.searchParams.set('room', room);
       if (db.settings.token) url.searchParams.set('token', db.settings.token);
 
+      // 没填分组名 → 跟随创建者：先问服务端这个房间叫什么
+      let roomGroup = (db.settings.roomGroup || '').trim();
+      if (!roomGroup) {
+        try {
+          const info = await fetch(url, { headers: { accept: 'application/json' } }).then((x) => x.json());
+          const serverName = (info && info.roomName || '').trim();
+          if (serverName) {
+            roomGroup = serverName;
+            db.settings.roomGroup = serverName;
+            if (!db.groups.includes(serverName)) db.groups.push(serverName);
+          }
+        } catch (e) { /* 拉不到就按空处理 */ }
+      }
+      if (!roomGroup && !silent) {
+        toast('这个房间还没有名字，先填个分组名');
+        syncing = false;
+        return;
+      }
+
+      const inRoom = (it) => (roomGroup ? itemInGroup(it, roomGroup) : false);
       const shared = db.items.filter(inRoom);
+
       const r = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -915,29 +933,12 @@ main{padding:14px 16px 0}
       const j = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
       if (!j.ok) throw new Error(j.error || 'HTTP ' + r.status);
 
-      // 房间名以创建者为准：后来的人自动跟随，把自己写错的名字并过去
-      let canonical = (j.roomName || '').trim() || roomGroup;
-      if (canonical && canonical !== db.settings.roomGroup) {
-        const wrong = db.settings.roomGroup;
-        db.settings.roomGroup = canonical;
-        if (!db.groups.includes(canonical)) db.groups.push(canonical);
-        if (wrong) {
-          db.groups = db.groups.filter((g) => g !== wrong);
-          db.items.forEach((it) => {
-            const gs = Array.isArray(it.groups) ? it.groups : (it.group ? [it.group] : []);
-            it.groups = gs.map((g) => (g === wrong ? canonical : g));
-            it.group = it.groups[0] || '';
-          });
-        }
-      }
-
       // 只替换该分组的包裹，其他分组原样保留
       const others = db.items.filter((i) => !inRoom(i));
       const remote = Array.isArray(j.items) ? j.items : [];
       db.items = others.concat(remote.map((it) => {
         const gs = Array.isArray(it.groups) ? it.groups.slice() : (it.group ? [it.group] : []);
-        const tag = canonical || roomGroup;
-        if (tag && !gs.includes(tag)) gs.push(tag);
+        if (roomGroup && !gs.includes(roomGroup)) gs.push(roomGroup);
         return { ...it, groups: gs, group: gs[0] || '' };
       }));
       dedupeByNo();
@@ -966,7 +967,6 @@ main{padding:14px 16px 0}
     const v = $('s_room').value.trim().toUpperCase();
     const g = $('s_roomGroup').value.trim();
     if (v && !/^[A-Z0-9]{4,12}$/.test(v)) return toast('房间码要 4-12 位字母数字');
-    if (v && !g) return toast('还要给这个家庭码起个分组名');
     db.settings.room = v;
     db.settings.roomGroup = v ? g : '';
     if (v && g && !db.groups.includes(g)) db.groups.push(g);
