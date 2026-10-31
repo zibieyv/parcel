@@ -253,7 +253,8 @@ main{padding:14px 16px 0}
       <button class="ghost" id="notifBtn">开启「通知读取」权限</button>
       <button class="ghost" id="smsBtn">检查短信权限</button>
       <button class="ghost" id="checkUpdateBtn">检查更新</button>
-      <button class="ghost" id="accBtn">开启读屏权限（悬浮球抓单号）</button>
+      <button class="ghost" id="accBtn">开启读屏权限（可选，更快更准）</button>
+      <button class="ghost" id="captureBtn">授权截屏（OCR 抓单号）</button>
       <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;padding:12px;border-radius:12px;background:var(--card2);border:1px solid var(--line)">
         <span style="font-size:14px">显示悬浮球</span>
         <input type="checkbox" id="ballToggle" style="width:20px;height:20px;flex:0 0 auto">
@@ -1150,6 +1151,12 @@ main{padding:14px 16px 0}
     $('smsBtn').onclick = () => window.Native.openAppSettings();
     $('checkUpdateBtn').onclick = () => checkUpdate(false);
     $('accBtn').onclick = () => window.Native.openAccessibilitySettings();
+    if ($('captureBtn')) {
+      $('captureBtn').onclick = () => {
+        if (window.Native.requestCapture) window.Native.requestCapture();
+        else toast('这个版本还不支持，先更新 App');
+      };
+    }
     $('ballBtn').onclick = () => toggleBall();
     syncBallUI();
     try {
