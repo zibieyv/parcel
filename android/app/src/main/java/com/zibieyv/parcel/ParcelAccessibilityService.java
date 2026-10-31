@@ -79,14 +79,29 @@ public class ParcelAccessibilityService extends AccessibilityService {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final Runnable collapseTask = () -> setExpanded(false);
 
+    /** 服务是否真的活着（权限开着但被系统杀了时，这里是 false） */
+    public static volatile boolean RUNNING = false;
+
     /* ---------------- 生命周期 ---------------- */
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
-        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        buildRoot();
-        ui.postDelayed(collapseTask, 8000);
+        try {
+            wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+            buildRoot();
+            ui.postDelayed(collapseTask, 8000);
+            RUNNING = true;
+        } catch (Throwable t) {
+            RUNNING = false;
+            toast("悬浮窗启动失败：" + t.getMessage());
+        }
+    }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        RUNNING = false;
+        return super.onUnbind(intent);
     }
 
     @Override
@@ -100,6 +115,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        RUNNING = false;
         if (wm != null && root != null && root.getParent() != null) {
             try { wm.removeView(root); } catch (Exception ignored) {}
         }

@@ -260,6 +260,12 @@ public class MainActivity extends Activity implements Bridge.Sink {
             }
         }
 
+        /** 读屏服务是否真的在跑（权限开着但进程被系统杀了时为 false） */
+        @JavascriptInterface
+        public boolean accessibilityRunning() {
+            return ParcelAccessibilityService.RUNNING;
+        }
+
         /** 打开无障碍设置页，让用户给「包裹」开读屏 */
         @JavascriptInterface
         public void openAccessibilitySettings() {

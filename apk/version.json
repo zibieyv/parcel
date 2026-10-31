@@ -1,6 +1,6 @@
 {
-  "versionCode": 17,
-  "versionName": "0.17",
-  "url": "/apk/parcel-0.17.apk",
-  "notes": "点球误识别修复、提示合并、展开时锁定拖动"
+  "versionCode": 18,
+  "versionName": "0.18",
+  "url": "/apk/parcel-0.18.apk",
+  "notes": "服务被系统杀死时能检测到并提示"
 }
