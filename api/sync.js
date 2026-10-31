@@ -18,10 +18,21 @@ const ROOM_RE = /^[A-Z0-9]{4,12}$/;
 const KEY_PREFIX = 'parcel:room:';
 
 function redisBase() {
-  // Upstash 集成给的是 UPSTASH_*，Vercel KV 集成给的是 KV_REST_API_*，两种都认
-  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-  if (!url || !token) throw new Error('未配置 Upstash，请先在 Vercel 里加 UPSTASH_REDIS_REST_URL / TOKEN');
+  // 不同接入方式注入的名字不一样，全都认：
+  //  - Upstash 官方集成：UPSTASH_REDIS_REST_URL / _TOKEN
+  //  - Vercel KV：KV_REST_API_URL / _TOKEN
+  //  - Vercel Storage 面板带自定义前缀（比如 STORAGE）：STORAGE_URL / STORAGE_TOKEN
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    process.env.STORAGE_URL ||
+    process.env.STORAGE_REST_URL;
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    process.env.STORAGE_TOKEN ||
+    process.env.STORAGE_REST_TOKEN;
+  if (!url || !token) throw new Error('未配置 Redis 环境变量，请在 Vercel 项目里连接 Upstash 后重新部署');
   return { url: url.replace(/\/$/, ''), token };
 }
 

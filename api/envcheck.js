@@ -10,6 +10,10 @@ module.exports = async function handler(req, res) {
     'UPSTASH_REDIS_REST_TOKEN',
     'KV_REST_API_URL',
     'KV_REST_API_TOKEN',
+    'STORAGE_URL',
+    'STORAGE_TOKEN',
+    'STORAGE_REST_URL',
+    'STORAGE_REST_TOKEN',
     'APP_TOKEN',
     'TRACK17_TOKEN',
   ];
