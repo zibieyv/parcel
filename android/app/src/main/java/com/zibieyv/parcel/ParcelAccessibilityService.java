@@ -146,10 +146,18 @@ public class ParcelAccessibilityService extends AccessibilityService {
                         if (!dragging) {
                             dragging = Math.abs(e.getRawX() - downX) > dp(8)
                                     || Math.abs(e.getRawY() - downY) > dp(8);
-                            if (dragging && expanded) collapse();
+                            if (dragging) {
+                                if (expanded) collapseUnderFinger(e.getRawX(), e.getRawY());
+                                // 以当前位置为新基准，避免第一帧跳一下
+                                startX = params.x;
+                                startY = params.y;
+                                downX = e.getRawX();
+                                downY = e.getRawY();
+                            }
                         }
                         params.x = startX + (int) (e.getRawX() - downX);
                         params.y = startY + (int) (e.getRawY() - downY);
+                        clampPosition();
                         if (root.getParent() != null) {
                             try { wm.updateViewLayout(root, params); } catch (Exception ignored) {}
                         }
@@ -176,6 +184,12 @@ public class ParcelAccessibilityService extends AccessibilityService {
     }
 
     private void render() {
+        rebuild();
+        applyLayout();
+    }
+
+    /** 只重建子视图并测量，不动窗口位置 */
+    private void rebuild() {
         tapActions.clear();
         root.removeAllViews();
 
@@ -185,9 +199,12 @@ public class ParcelAccessibilityService extends AccessibilityService {
         root.measure(
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        if (root.getParent() != null) {
-            try { wm.updateViewLayout(root, params); } catch (Exception ignored) {}
-        }
+    }
+
+    /** 把位置/尺寸提交给 WindowManager */
+    private void applyLayout() {
+        if (root.getParent() == null) return;
+        try { wm.updateViewLayout(root, params); } catch (Exception ignored) {}
     }
 
     private View buildPill() {
@@ -300,9 +317,32 @@ public class ParcelAccessibilityService extends AccessibilityService {
     }
 
     private void collapse() {
-        if (root == null) return;
+        if (root == null || !expanded) return;
         expanded = false;
         render();
+    }
+
+    /**
+     * 拖动开始时把展开态收成小球，并让小球直接落在手指下方。
+     * 只重建 + 提交一次布局，避免"卡一下再跳到手指"。
+     */
+    private void collapseUnderFinger(float rawX, float rawY) {
+        expanded = false;
+        rebuild();
+        params.x = (int) (rawX - dp(29));
+        params.y = (int) (rawY - dp(29));
+        clampPosition();
+        applyLayout();
+    }
+
+    /** 别让悬浮窗跑出屏幕 */
+    private void clampPosition() {
+        int w = expanded ? dp(268) : dp(58);
+        int h = expanded ? dp(130) : dp(86);
+        int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - w);
+        int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - h);
+        params.x = Math.max(0, Math.min(params.x, maxX));
+        params.y = Math.max(0, Math.min(params.y, maxY));
     }
 
     private void openApp() {

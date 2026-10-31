@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "0.10",
-  "url": "/apk/parcel-0.10.apk",
-  "notes": "拖动自动收起、返回按钮左对齐"
+  "versionCode": 11,
+  "versionName": "0.11",
+  "url": "/apk/parcel-0.11.apk",
+  "notes": "拖拽手感修正"
 }
