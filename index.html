@@ -359,6 +359,7 @@ main{padding:14px 16px 0}
     settings: { base: location.origin, token: '', room: '', roomGroup: '' },
   };
   let db = load();
+  dedupeByNo();
 
   /** 旧数据只有 group，新数据用 groups 数组，读进来统一 */
   function normalizeItem(it) {
@@ -373,6 +374,38 @@ main{padding:14px 16px 0}
     const gs = Array.isArray(it.groups) ? it.groups : (it.group ? [it.group] : []);
     if (key === 'none') return gs.length === 0;
     return gs.includes(key);
+  }
+
+  /**
+   * 按单号去重：两台手机各自加了同一个单号时 id 不同，但其实是同一件。
+   * 留 updatedAt 新的，分组取并集，空字段从旧的那条补。
+   */
+  function dedupeByNo() {
+    const byNo = new Map();
+    const rest = [];
+    for (const it of db.items) {
+      const key = String(it.no || '').toUpperCase().trim();
+      if (!key) { rest.push(it); continue; }
+      const prev = byNo.get(key);
+      if (!prev) { byNo.set(key, it); continue; }
+
+      const keep = (it.updatedAt || '') >= (prev.updatedAt || '') ? it : prev;
+      const drop = keep === it ? prev : it;
+      const gs = Array.from(new Set([
+        ...(Array.isArray(keep.groups) ? keep.groups : (keep.group ? [keep.group] : [])),
+        ...(Array.isArray(drop.groups) ? drop.groups : (drop.group ? [drop.group] : [])),
+      ]));
+      keep.groups = gs;
+      keep.group = gs[0] || '';
+      if (!keep.note && drop.note) keep.note = drop.note;
+      if (!keep.pickup && drop.pickup) keep.pickup = drop.pickup;
+      if (!keep.name && drop.name) keep.name = drop.name;
+      byNo.set(key, keep);
+
+      const idx = rest.indexOf(drop);
+      if (idx >= 0) rest.splice(idx, 1);
+    }
+    db.items = [...byNo.values()].concat(rest);
   }
 
   function load() {
@@ -889,6 +922,7 @@ main{padding:14px 16px 0}
         if (roomGroup && !gs.includes(roomGroup)) gs.push(roomGroup);
         return { ...it, groups: gs, group: gs[0] || '' };
       }));
+      dedupeByNo();
 
       lastSync = new Date().toISOString();
       localStorage.setItem(KEY, JSON.stringify(db));
