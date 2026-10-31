@@ -302,7 +302,7 @@ main{padding:14px 16px 0}
 
   function refreshFilters() {
     const types = [
-      ['all', '全部'], ['active', '在途'], ['pickup', '待取件'], ['delivered', '已签收'],
+      ['all', '全部'], ['active', '在途'], ['pickup', '待取件'], ['delivered', '已签收'], ['archived', '已归档'],
     ];
     let html = types.map(([k, n]) => `<button class="chip ${filter.type===k?'on':''}" data-f="${k}">${n}</button>`).join('');
     for (const g of db.groups) {
@@ -320,11 +320,17 @@ main{padding:14px 16px 0}
 
   /* ---------- 列表 ---------- */
   function visibleItems() {
-    let list = db.items.filter((i) => !i.archived);
-    if (filter.type === 'active') list = list.filter((i) => !['delivered','exception'].includes(i.status));
-    else if (filter.type === 'pickup') list = list.filter((i) => i.status === 'pickup' || (i.pickup && i.status !== 'delivered'));
-    else if (filter.type === 'delivered') list = list.filter((i) => i.status === 'delivered');
-    else if (filter.type.startsWith('g:')) list = list.filter((i) => i.group === filter.type.slice(2));
+    const all = db.items;
+    let list;
+    if (filter.type === 'archived') {
+      list = all.filter((i) => i.archived);
+    } else {
+      list = all.filter((i) => !i.archived);
+      if (filter.type === 'active') list = list.filter((i) => !['delivered', 'exception'].includes(i.status));
+      else if (filter.type === 'pickup') list = list.filter((i) => i.status === 'pickup' || (i.pickup && i.status !== 'delivered'));
+      else if (filter.type === 'delivered') list = list.filter((i) => i.status === 'delivered');
+      else if (filter.type.startsWith('g:')) list = list.filter((i) => i.group === filter.type.slice(2));
+    }
     return list.sort((a, b) => {
       const rank = (x) => x.status === 'delivered' ? 2 : (x.pickup ? 0 : 1);
       const r = rank(a) - rank(b);
@@ -375,6 +381,9 @@ main{padding:14px 16px 0}
         <div class="acts">
           <button data-act="refresh">刷新轨迹</button>
           <button data-act="edit">编辑</button>
+          ${it.archived
+            ? '<button data-act="unarchive">恢复</button>'
+            : (st === 'delivered' ? '<button data-act="archive">归档</button>' : '')}
         </div>
       </div>`;
   }
@@ -404,8 +413,15 @@ main{padding:14px 16px 0}
     const btn = e.target.closest('[data-act]');
     if (btn) {
       e.stopPropagation();
-      if (btn.dataset.act === 'refresh') refreshOne(it, btn);
-      if (btn.dataset.act === 'edit') openEdit(it);
+      const act = btn.dataset.act;
+      if (act === 'refresh') refreshOne(it, btn);
+      if (act === 'edit') openEdit(it);
+      if (act === 'archive') {
+        it.archived = true; save(); render(); toast('已归档，去「已归档」里找');
+      }
+      if (act === 'unarchive') {
+        it.archived = false; save(); render(); toast('已恢复到列表');
+      }
       return;
     }
     openDetail(it);
@@ -423,20 +439,25 @@ main{padding:14px 16px 0}
     return j;
   }
 
+  /** 把接口结果写进一条包裹（含取件码自动捡拾） */
+  function applyTrack(it, j) {
+    Object.assign(it, {
+      status: j.status, statusText: j.statusText, carrier: j.carrier,
+      latest: j.latest, latestTime: j.latestTime, events: j.events || [],
+      updatedAt: j.updatedAt || new Date().toISOString(),
+    });
+    if (!it.pickup) {
+      const code = detectPickup(j.latest) || detectPickup((j.events || []).map((e) => e.text).join(' '));
+      if (code) it.pickup = code;
+    }
+  }
+
   async function refreshOne(it, btn) {
     if (!it.no) return toast('这单没有单号');
     if (btn) { btn.disabled = true; btn.textContent = '查询中…'; }
     try {
       const j = await queryTrack(it.no);
-      Object.assign(it, {
-        status: j.status, statusText: j.statusText, carrier: j.carrier,
-        latest: j.latest, latestTime: j.latestTime, events: j.events || [],
-        updatedAt: j.updatedAt || new Date().toISOString(),
-      });
-      if (!it.pickup) {
-        const code = detectPickup(j.latest) || detectPickup((j.events || []).map((e) => e.text).join(' '));
-        if (code) it.pickup = code;
-      }
+      applyTrack(it, j);
       save(); render();
       toast(j.status === 'notfound' ? '还没轨迹，晚点再刷' : '已更新');
     } catch (err) {
@@ -447,26 +468,41 @@ main{padding:14px 16px 0}
   }
 
   $('refreshAll').onclick = async () => {
-    const list = db.items.filter((i) => i.no && i.status !== 'delivered');
+    const list = db.items.filter((i) => i.no && i.status !== 'delivered' && !i.archived);
     if (!list.length) return toast('没有要刷新的');
     toast(`刷新 ${list.length} 件…`);
     for (const it of list) {
       try {
-        const j = await queryTrack(it.no);
-        Object.assign(it, {
-          status: j.status, statusText: j.statusText, carrier: j.carrier,
-          latest: j.latest, latestTime: j.latestTime, events: j.events || [],
-          updatedAt: j.updatedAt || new Date().toISOString(),
-        });
-        if (!it.pickup) {
-          const code = detectPickup(j.latest) || detectPickup((j.events || []).map((e) => e.text).join(' '));
-          if (code) it.pickup = code;
-        }
+        applyTrack(it, await queryTrack(it.no));
       } catch { /* 单条失败不影响其他 */ }
     }
     save(); render();
     toast('刷新完成');
   };
+
+  /**
+   * 打开页面时自动刷一遍：只在途的、且 30 分钟内没查过的。
+   * 不做定时轮询，免得太快烧光 17TRACK 的免费额度。
+   */
+  const AUTO_REFRESH_MINUTES = 30;
+  async function autoRefresh() {
+    if (!db.settings.token) return;
+    const now = Date.now();
+    const list = db.items.filter((i) => {
+      if (!i.no || i.archived || i.status === 'delivered' || i.status === 'exception') return false;
+      if (!i.updatedAt) return true;
+      return now - new Date(i.updatedAt).getTime() > AUTO_REFRESH_MINUTES * 60000;
+    });
+    if (!list.length) return;
+    toast(`自动刷新 ${list.length} 件…`);
+    for (const it of list) {
+      try {
+        applyTrack(it, await queryTrack(it.no));
+        save();
+      } catch { /* 忽略单条失败 */ }
+    }
+    render();
+  }
 
   /* ---------- 弹层 ---------- */
   function openSheet(id) { $(id).classList.add('on'); }
@@ -601,6 +637,8 @@ main{padding:14px 16px 0}
   render();
   if (!db.settings.token) {
     setTimeout(() => toast('先去右上角 ⚙ 填 APP_TOKEN'), 800);
+  } else {
+    setTimeout(autoRefresh, 600);
   }
 
   /* ---------- 原生注入的取件码 ---------- */
