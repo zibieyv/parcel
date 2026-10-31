@@ -75,6 +75,7 @@ h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.5px}
   border:1px solid var(--line);font-size:13px;color:var(--dim);white-space:nowrap;
 }
 .chip.on{background:#1b2740;border-color:#2f4d85;color:#a8c4ff}
+.chip em{font-style:normal;font-size:11px;opacity:.75;margin-left:4px}
 
 /* 列表 */
 main{padding:14px 16px 0}
@@ -180,8 +181,8 @@ main{padding:14px 16px 0}
       <button class="icon-btn" id="openSettings" title="设置">⚙</button>
     </div>
   </div>
-  <div class="filters" id="typeFilters"></div>
-  <div class="filters" id="groupFilters" style="padding-top:6px"></div>
+  <div class="filters" id="groupFilters"></div>
+  <div class="filters" id="typeFilters" style="padding-top:6px"></div>
 </header>
 
 <div class="updatebar" id="updateBar"></div>
@@ -247,8 +248,11 @@ main{padding:14px 16px 0}
     </div>
 
     <div style="margin-top:22px">
-      <div class="field"><label>家庭同步（可选，需在 Vercel 配 Upstash）</label>
+      <div class="field"><label>家庭码（只同步下面那个分组的包裹）</label>
         <input id="s_room" placeholder="房间码，比如 7Q2K9M" autocapitalize="characters">
+      </div>
+      <div class="field"><label>家庭码绑定的分组名</label>
+        <input id="s_roomGroup" placeholder="比如：家里">
       </div>
       <div style="display:flex;gap:10px">
         <button class="ghost" id="genRoom">随机生成房间码</button>
@@ -349,9 +353,9 @@ main{padding:14px 16px 0}
   /* ---------- 存储 ---------- */
   const defaults = {
     items: [],
-    groups: ['我的', '家人的'],
+    groups: ['我的'],
     deleted: {},
-    settings: { base: location.origin, token: '', room: '' },
+    settings: { base: location.origin, token: '', room: '', roomGroup: '' },
   };
   let db = load();
 
@@ -401,48 +405,82 @@ main{padding:14px 16px 0}
     return `${Math.floor(diff/86400)} 天前`;
   }
 
-  /* ---------- 筛选 ---------- */
-  let filter = { type: 'all' };
+  /* ---------- 筛选：第一行分组，第二行状态（带计数） ---------- */
+  let filter = { group: 'all', status: 'all' };
   let lpFired = false;
 
+  /** 当前分组范围内的包裹（不含归档过滤） */
+  function groupScope() {
+    if (filter.group === 'none') return db.items.filter((i) => !i.group);
+    if (filter.group !== 'all') return db.items.filter((i) => i.group === filter.group);
+    return db.items;
+  }
+
+  function statusMatched(i, status) {
+    if (status === 'archived') return !!i.archived;
+    if (i.archived) return false;
+    if (status === 'active') return !['delivered', 'exception'].includes(i.status);
+    if (status === 'pickup') return i.status === 'pickup' || (i.pickup && i.status !== 'delivered');
+    return true;
+  }
+
   function refreshFilters() {
-    const types = [
-      ['all', '全部'], ['active', '在途'], ['pickup', '待取件'], ['archived', '已归档'],
+    // 第一行：分组
+    const groups = [{ key: 'all', name: '全部' }, { key: 'none', name: '未分组' }]
+      .concat(db.groups.map((g) => ({ key: g, name: g })));
+    let groupHtml = groups
+      .map((g) => `<button class="chip ${filter.group===g.key?'on':''}" data-g="${esc(g.key)}" data-group="1">${esc(g.name)}</button>`)
+      .join('');
+    groupHtml += `<button class="chip" data-g="__new" data-group="1" style="color:#9db8ff">＋</button>`;
+
+    // 第二行：状态（计数基于当前分组）
+    const scope = groupScope();
+    const counts = {
+      all: scope.filter((i) => !i.archived).length,
+      active: scope.filter((i) => statusMatched(i, 'active')).length,
+      pickup: scope.filter((i) => statusMatched(i, 'pickup')).length,
+      archived: scope.filter((i) => i.archived).length,
+    };
+    const statuses = [
+      ['all', '全部', counts.all],
+      ['active', '在途', counts.active],
+      ['pickup', '待取件', counts.pickup],
+      ['archived', '已归档', counts.archived],
     ];
-    const typeHtml = types
-      .map(([k, n]) => `<button class="chip ${filter.type===k?'on':''}" data-f="${k}">${n}</button>`)
+    const statusHtml = statuses
+      .map(([k, n, c]) => `<button class="chip ${filter.status===k?'on':''}" data-s="${k}">${n}${c ? `<em>${c}</em>` : ''}</button>`)
       .join('');
 
-    let groupHtml = `<button class="chip ${filter.type==='g:'?'on':''}" data-f="g:">未分组</button>`;
-    for (const g of db.groups) {
-      groupHtml += `<button class="chip ${filter.type==='g:'+g?'on':''}" data-f="g:${esc(g)}">${esc(g)}</button>`;
-    }
-    groupHtml += `<button class="chip" data-f="__new" style="color:#9db8ff">＋</button>`;
-
-    $('typeFilters').innerHTML = typeHtml;
     $('groupFilters').innerHTML = groupHtml;
+    $('typeFilters').innerHTML = statusHtml;
 
-    const onClick = (e) => {
-      const b = e.target.closest('[data-f]');
-      if (!b) return;
-      if (lpFired) { lpFired = false; return; }
-      if (b.dataset.f === '__new') { openGroupSheet(null); return; }
-      filter.type = b.dataset.f;
+    $('groupFilters').onclick = (e) => {
+      const b = e.target.closest('[data-g]');
+      if (!b || lpFired) { lpFired = false; return; }
+      if (b.dataset.g === '__new') { openGroupSheet(null); return; }
+      filter.group = b.dataset.g;
       refreshFilters();
       render();
     };
-    $('typeFilters').onclick = onClick;
-    $('groupFilters').onclick = onClick;
+
+    $('typeFilters').onclick = (e) => {
+      const b = e.target.closest('[data-s]');
+      if (!b) return;
+      filter.status = b.dataset.s;
+      refreshFilters();
+      render();
+    };
 
     // 长按分组胶囊 → 改名 / 删除
     let lpTimer = null;
     $('groupFilters').ontouchstart = (e) => {
-      const b = e.target.closest('[data-f]');
-      if (!b || !b.dataset.f.startsWith('g:') || b.dataset.f === 'g:') return;
+      const b = e.target.closest('[data-g]');
+      const key = b && b.dataset.g;
+      if (!key || key === 'all' || key === 'none' || key === '__new') return;
       clearTimeout(lpTimer);
       lpTimer = setTimeout(() => {
         lpFired = true;
-        openGroupSheet(b.dataset.f.slice(2));
+        openGroupSheet(key);
       }, 550);
     };
     ['touchend', 'touchmove', 'touchcancel'].forEach((ev) => {
@@ -452,17 +490,7 @@ main{padding:14px 16px 0}
 
   /* ---------- 列表 ---------- */
   function visibleItems() {
-    const all = db.items;
-    let list;
-    if (filter.type === 'archived') {
-      list = all.filter((i) => i.archived);
-    } else {
-      list = all.filter((i) => !i.archived);
-      if (filter.type === 'active') list = list.filter((i) => !['delivered', 'exception'].includes(i.status));
-      else if (filter.type === 'pickup') list = list.filter((i) => i.status === 'pickup' || (i.pickup && i.status !== 'delivered'));
-      else if (filter.type === 'g:') list = list.filter((i) => !i.group);
-      else if (filter.type.startsWith('g:')) list = list.filter((i) => i.group === filter.type.slice(2));
-    }
+    const list = groupScope().filter((i) => statusMatched(i, filter.status));
     return list.sort((a, b) => {
       const rank = (x) => x.status === 'delivered' ? 2 : (x.pickup ? 0 : 1);
       const r = rank(a) - rank(b);
@@ -746,6 +774,7 @@ main{padding:14px 16px 0}
     $('s_base').value = db.settings.base || location.origin;
     $('s_token').value = db.settings.token || '';
     $('s_room').value = db.settings.room || '';
+    $('s_roomGroup').value = db.settings.roomGroup || '';
     refreshSyncState();
     openSheet('setSheet');
   };
@@ -773,7 +802,8 @@ main{padding:14px 16px 0}
       el.textContent = '没设房间码，只有本机有数据。填一个相同的房间码，家人的手机就会看到同一份列表。';
       return;
     }
-    el.textContent = `房间 ${room}` + (lastSync ? ` · 上次同步 ${relTime(lastSync)}` : ' · 还没同步过');
+    el.textContent = `房间 ${room}` + (db.settings.roomGroup ? ` · 只同步「${db.settings.roomGroup}」分组` : ' · 还没绑定分组')
+      + (lastSync ? ` · 上次同步 ${relTime(lastSync)}` : '');
   }
 
   function scheduleSync() {
@@ -786,6 +816,9 @@ main{padding:14px 16px 0}
     const room = roomCode();
     if (!room) { if (!silent) toast('先在设置里填房间码'); return; }
     if (syncing) return;
+    const roomGroup = (db.settings.roomGroup || '').trim();
+    const inRoom = (it) => (roomGroup ? it.group === roomGroup : false);
+
     syncing = true;
     try {
       const base = (db.settings.base || location.origin).replace(/\/$/, '');
@@ -793,24 +826,28 @@ main{padding:14px 16px 0}
       url.searchParams.set('room', room);
       if (db.settings.token) url.searchParams.set('token', db.settings.token);
 
+      const shared = db.items.filter(inRoom);
       const r = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          items: db.items,
-          groups: db.groups,
+          items: shared,
+          groups: roomGroup ? [roomGroup] : [],
           deleted: db.deleted || {},
         }),
       });
       const j = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
       if (!j.ok) throw new Error(j.error || 'HTTP ' + r.status);
 
-      db.items = Array.isArray(j.items) ? j.items : db.items;
-      db.groups = Array.isArray(j.groups) ? j.groups : db.groups;
+      // 只替换该分组的包裹，其他分组原样保留
+      const others = db.items.filter((i) => !inRoom(i));
+      const remote = Array.isArray(j.items) ? j.items : [];
+      db.items = others.concat(remote.map((it) => ({ ...it, group: roomGroup || it.group })));
+
       lastSync = new Date().toISOString();
       localStorage.setItem(KEY, JSON.stringify(db));
       refreshFilters(); render(); refreshSyncState();
-      if (!silent) toast(`同步完成（第 ${j.rev} 版）`);
+      if (!silent) toast(`同步完成（第 ${j.rev} 版，${remote.length} 件）`);
     } catch (err) {
       if (!silent) toast('同步失败：' + err.message);
       throw err;
@@ -829,11 +866,15 @@ main{padding:14px 16px 0}
 
   $('saveRoom').onclick = async () => {
     const v = $('s_room').value.trim().toUpperCase();
+    const g = $('s_roomGroup').value.trim();
     if (v && !/^[A-Z0-9]{4,12}$/.test(v)) return toast('房间码要 4-12 位字母数字');
+    if (v && !g) return toast('还要给这个家庭码起个分组名');
     db.settings.room = v;
+    db.settings.roomGroup = v ? g : '';
+    if (v && g && !db.groups.includes(g)) db.groups.push(g);
     localStorage.setItem(KEY, JSON.stringify(db));
-    refreshSyncState();
-    if (!v) return toast('已清空房间码');
+    refreshSyncState(); refreshFilters(); render();
+    if (!v) return toast('已清空家庭码');
     try { await syncNow(false); } catch (e) { /* 错误已提示 */ }
   };
 
