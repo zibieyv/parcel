@@ -224,6 +224,18 @@ main{padding:14px 16px 0}
     </div>
     <button class="ghost" id="saveGroups">保存分组</button>
 
+    <div style="margin-top:22px">
+      <div class="field"><label>家庭同步（可选，需在 Vercel 配 Upstash）</label>
+        <input id="s_room" placeholder="房间码，比如 7Q2K9M" autocapitalize="characters">
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="ghost" id="genRoom">随机生成房间码</button>
+        <button class="ghost" id="saveRoom">保存并同步</button>
+      </div>
+      <button class="ghost" id="syncNow" style="margin-top:8px">立即同步</button>
+      <p id="syncState" style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:10px"></p>
+    </div>
+
     <div class="field" style="margin-top:22px"><label>接口地址</label><input id="s_base" placeholder="https://parcel-seven-omega.vercel.app"></div>
     <div class="field"><label>APP_TOKEN</label><input id="s_token" placeholder="与 Vercel 环境变量一致"></div>
     <button class="primary" id="saveSettings">保存</button>
@@ -298,25 +310,30 @@ main{padding:14px 16px 0}
   const defaults = {
     items: [],
     groups: ['我的', '家人的'],
-    settings: { base: location.origin, token: '' },
+    deleted: {},
+    settings: { base: location.origin, token: '', room: '' },
   };
   let db = load();
 
   function load() {
     try {
       const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
-      if (!raw) return { ...defaults, groups: [...defaults.groups] };
+      if (!raw) return { ...defaults, groups: [...defaults.groups], deleted: {} };
       return {
         items: Array.isArray(raw.items) ? raw.items : [],
         groups: Array.isArray(raw.groups) ? raw.groups : [...defaults.groups],
         pendingCodes: Array.isArray(raw.pendingCodes) ? raw.pendingCodes : [],
+        deleted: raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {},
         settings: { ...defaults.settings, ...(raw.settings || {}) },
       };
     } catch {
-      return { ...defaults, groups: [...defaults.groups] };
+      return { ...defaults, groups: [...defaults.groups], deleted: {} };
     }
   }
-  function save() { localStorage.setItem(KEY, JSON.stringify(db)); }
+  function save() {
+    localStorage.setItem(KEY, JSON.stringify(db));
+    scheduleSync();
+  }
 
   /* ---------- 工具 ---------- */
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -464,10 +481,10 @@ main{padding:14px 16px 0}
       if (act === 'refresh') refreshOne(it, btn);
       if (act === 'edit') openEdit(it);
       if (act === 'archive') {
-        it.archived = true; save(); render(); toast('已归档，去「已归档」里找');
+        it.archived = true; it.updatedAt = new Date().toISOString(); save(); render(); toast('已归档，去「已归档」里找');
       }
       if (act === 'unarchive') {
-        it.archived = false; save(); render(); toast('已恢复到列表');
+        it.archived = false; it.updatedAt = new Date().toISOString(); save(); render(); toast('已恢复到列表');
       }
       return;
     }
@@ -596,6 +613,7 @@ main{padding:14px 16px 0}
     };
     if (editing) {
       Object.assign(editing, data);
+      editing.updatedAt = new Date().toISOString();
     } else {
       db.items.unshift({
         id: uid(), ...data, status: 'pending', statusText: '', carrier: '',
@@ -612,6 +630,8 @@ main{padding:14px 16px 0}
   $('delItem').onclick = () => {
     if (!editing) return;
     if (!confirm('删掉这个包裹？')) return;
+    db.deleted = db.deleted || {};
+    db.deleted[editing.id] = new Date().toISOString();
     db.items = db.items.filter((i) => i.id !== editing.id);
     save(); closeSheets(); render(); toast('已删除');
   };
@@ -640,7 +660,9 @@ main{padding:14px 16px 0}
   $('openSettings').onclick = () => {
     $('s_base').value = db.settings.base || location.origin;
     $('s_token').value = db.settings.token || '';
+    $('s_room').value = db.settings.room || '';
     $('s_groups').value = db.groups.join('\n');
+    refreshSyncState();
     openSheet('setSheet');
   };
 
@@ -649,6 +671,89 @@ main{padding:14px 16px 0}
     db.settings.token = $('s_token').value.trim();
     save(); toast('设置已保存');
   };
+
+  /* ---------- 家庭同步 ---------- */
+  let syncTimer = null;
+  let syncing = false;
+  let lastSync = null;
+
+  function roomCode() {
+    return (db.settings.room || '').trim().toUpperCase();
+  }
+
+  function refreshSyncState() {
+    const el = $('syncState');
+    if (!el) return;
+    const room = roomCode();
+    if (!room) {
+      el.textContent = '没设房间码，只有本机有数据。填一个相同的房间码，家人的手机就会看到同一份列表。';
+      return;
+    }
+    el.textContent = `房间 ${room}` + (lastSync ? ` · 上次同步 ${relTime(lastSync)}` : ' · 还没同步过');
+  }
+
+  function scheduleSync() {
+    if (!roomCode() || syncing) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => { syncNow(true).catch(() => {}); }, 1500);
+  }
+
+  async function syncNow(silent) {
+    const room = roomCode();
+    if (!room) { if (!silent) toast('先在设置里填房间码'); return; }
+    if (syncing) return;
+    syncing = true;
+    try {
+      const base = (db.settings.base || location.origin).replace(/\/$/, '');
+      const url = new URL('/api/sync', base);
+      url.searchParams.set('room', room);
+      if (db.settings.token) url.searchParams.set('token', db.settings.token);
+
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          items: db.items,
+          groups: db.groups,
+          deleted: db.deleted || {},
+        }),
+      });
+      const j = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
+      if (!j.ok) throw new Error(j.error || 'HTTP ' + r.status);
+
+      db.items = Array.isArray(j.items) ? j.items : db.items;
+      db.groups = Array.isArray(j.groups) ? j.groups : db.groups;
+      lastSync = new Date().toISOString();
+      localStorage.setItem(KEY, JSON.stringify(db));
+      refreshFilters(); render(); refreshSyncState();
+      if (!silent) toast(`同步完成（第 ${j.rev} 版）`);
+    } catch (err) {
+      if (!silent) toast('同步失败：' + err.message);
+      throw err;
+    } finally {
+      syncing = false;
+    }
+  }
+
+  $('genRoom').onclick = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = '';
+    for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    $('s_room').value = s;
+    toast('已生成，记得点「保存并同步」');
+  };
+
+  $('saveRoom').onclick = async () => {
+    const v = $('s_room').value.trim().toUpperCase();
+    if (v && !/^[A-Z0-9]{4,12}$/.test(v)) return toast('房间码要 4-12 位字母数字');
+    db.settings.room = v;
+    localStorage.setItem(KEY, JSON.stringify(db));
+    refreshSyncState();
+    if (!v) return toast('已清空房间码');
+    try { await syncNow(false); } catch (e) { /* 错误已提示 */ }
+  };
+
+  $('syncNow').onclick = () => syncNow(false).catch(() => {});
 
   $('saveGroups').onclick = () => {
     db.groups = $('s_groups').value.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -883,10 +988,16 @@ main{padding:14px 16px 0}
   setTimeout(() => checkUpdate(true), 1500);
   setTimeout(() => window.__checkPendingAdd && window.__checkPendingAdd(), 1200);
 
+  // 有房间码就开机同步一次
+  if (roomCode()) setTimeout(() => syncNow(true).catch(() => {}), 900);
+
   // 回到前台就查一次，平时每 4 秒查一次（只是个本地调用，不费电不费流量）
   setTimeout(checkAccBar, 2000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') checkAccBar();
+    if (document.visibilityState === 'visible') {
+      checkAccBar();
+      if (roomCode()) syncNow(true).catch(() => {});
+    }
   });
   setInterval(() => {
     if (document.visibilityState === 'visible') checkAccBar();
@@ -912,6 +1023,7 @@ main{padding:14px 16px 0}
       target.pickupSource = source || '';
       target.status = 'pickup';
       target.statusText = '待取件';
+      target.updatedAt = new Date().toISOString();
       save(); render();
       toast(`取件码 ${code} 已填入「${target.name || target.no || '包裹'}」`);
     } else {
