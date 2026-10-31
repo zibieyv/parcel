@@ -1,7 +1,10 @@
 package com.zibieyv.parcel;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -15,6 +18,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.SpannableString;
@@ -82,6 +86,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
     /** 服务是否真的活着（权限开着但被系统杀了时，这里是 false） */
     public static volatile boolean RUNNING = false;
 
+    private BroadcastReceiver ballReceiver;
+
     /* ---------------- 生命周期 ---------------- */
 
     @Override
@@ -89,13 +95,45 @@ public class ParcelAccessibilityService extends AccessibilityService {
         super.onServiceConnected();
         try {
             wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-            buildRoot();
+            if (BallPrefs.isEnabled(this)) buildRoot();
             ui.postDelayed(collapseTask, 8000);
+
+            ballReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    applyBallVisibility();
+                }
+            };
+            IntentFilter f = new IntentFilter(BallPrefs.ACTION_CHANGED);
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(ballReceiver, f, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                registerReceiver(ballReceiver, f);
+            }
+
             RUNNING = true;
         } catch (Throwable t) {
             RUNNING = false;
             toast("悬浮窗启动失败：" + t.getMessage());
         }
+    }
+
+    /** 开关变化时显隐悬浮球 */
+    private void applyBallVisibility() {
+        if (root == null) {
+            if (BallPrefs.isEnabled(this)) buildRoot();
+            return;
+        }
+        if (BallPrefs.isEnabled(this)) return;
+        removeBallRoot();
+    }
+
+    private void removeBallRoot() {
+        if (wm != null && root != null && root.getParent() != null) {
+            try { wm.removeView(root); } catch (Exception ignored) {}
+        }
+        root = null;
+        removeResultCard();
     }
 
     @Override
@@ -116,6 +154,10 @@ public class ParcelAccessibilityService extends AccessibilityService {
     @Override
     public void onDestroy() {
         RUNNING = false;
+        if (ballReceiver != null) {
+            try { unregisterReceiver(ballReceiver); } catch (Exception ignored) {}
+            ballReceiver = null;
+        }
         if (wm != null && root != null && root.getParent() != null) {
             try { wm.removeView(root); } catch (Exception ignored) {}
         }

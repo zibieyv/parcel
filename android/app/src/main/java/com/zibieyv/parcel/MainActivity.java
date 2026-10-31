@@ -58,6 +58,26 @@ public class MainActivity extends Activity implements Bridge.Sink {
         web.loadUrl(HOME);
 
         askSmsPermission();
+        askNotifPermission();
+        startKeepAlive();
+    }
+
+    private void startKeepAlive() {
+        try {
+            Intent i = new Intent(this, KeepAliveService.class);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
+            else startService(i);
+        } catch (Exception e) {
+            toast("常驻服务启动失败：" + e.getMessage());
+        }
+    }
+
+    private void askNotifPermission() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 1002);
+        }
     }
 
     private void askSmsPermission() {
@@ -264,6 +284,18 @@ public class MainActivity extends Activity implements Bridge.Sink {
         @JavascriptInterface
         public boolean accessibilityRunning() {
             return ParcelAccessibilityService.RUNNING;
+        }
+
+        /** 悬浮球开关 */
+        @JavascriptInterface
+        public boolean ballEnabled() {
+            return BallPrefs.isEnabled(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void setBallEnabled(boolean on) {
+            BallPrefs.setEnabled(MainActivity.this, on);
+            sendBroadcast(new Intent(BallPrefs.ACTION_CHANGED).setPackage(getPackageName()));
         }
 
         /** 打开无障碍设置页，让用户给「包裹」开读屏 */

@@ -1,6 +1,6 @@
 {
-  "versionCode": 18,
-  "versionName": "0.18",
-  "url": "/apk/parcel-0.18.apk",
-  "notes": "服务被系统杀死时能检测到并提示"
+  "versionCode": 19,
+  "versionName": "0.19",
+  "url": "/apk/parcel-0.19.apk",
+  "notes": "常驻通知保活 + 悬浮球开关"
 }
