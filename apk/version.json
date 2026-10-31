@@ -1,6 +1,6 @@
 {
-  "versionCode": 16,
-  "versionName": "0.16",
-  "url": "/apk/parcel-0.16.apk",
-  "notes": "点卡片收起提示，拖动不再自动收起"
+  "versionCode": 17,
+  "versionName": "0.17",
+  "url": "/apk/parcel-0.17.apk",
+  "notes": "点球误识别修复、提示合并、展开时锁定拖动"
 }

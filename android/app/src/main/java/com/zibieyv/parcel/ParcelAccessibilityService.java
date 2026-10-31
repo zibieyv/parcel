@@ -57,8 +57,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
     private static final Pattern KEYWORD = Pattern.compile("快递|快件|运单|物流|包裹|已签收|运输中|派送|揽收");
 
     private static final String HINT =
-            "找到待收货包裹，在有快递单号的页面，点击大肥鱼添加包裹\n"
-            + "点击此处收起提示，拖动肥鱼";
+            "找到待收货包裹，在有快递单号的页面，点击大肥鱼添加包裹，"
+            + "点击此处收起提示以拖动肥鱼";
 
     private WindowManager wm;
     private LinearLayout root;
@@ -151,6 +151,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
                         dragging = Math.abs(e.getRawX() - downX) > dp(8)
                                 || Math.abs(e.getRawY() - downY) > dp(8);
                     }
+                    // 展开时锁住：必须先点一下收起成小球，才能拖
+                    if (expanded) return true;
                     params.x = startX + (int) (e.getRawX() - downX);
                     params.y = startY + (int) (e.getRawY() - downY);
                     clampPosition();
@@ -275,8 +277,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
     private CharSequence highlight(String text) {
         SpannableString ss = new SpannableString(text);
         int orange = Color.parseColor("#F5822B");
-        for (String kw : new String[]{"待收货包裹", "快递单号", "大肥鱼", "收起提示", "拖动肥鱼"}) {
-            int from = 0;
+        for (String kw : new String[]{"待收货包裹", "快递单号", "大肥鱼", "收起提示", "拖动肥鱼"}) {            int from = 0;
             while (true) {
                 int i = text.indexOf(kw, from);
                 if (i < 0) break;
@@ -291,10 +292,12 @@ public class ParcelAccessibilityService extends AccessibilityService {
     /* ---------------- 点击分发 ---------------- */
 
     private void handleTap(float rawX, float rawY) {
-        // 先小后大：鱼图标优先于整张卡片
+        // 先小后大：鱼图标优先于整张卡片。
+        // 用 isShown() 而不是 getVisibility()：父容器收起时子 View 自己仍是 VISIBLE，
+        // 但它的坐标是上一次布局的残留，会误命中。
         View[] targets = new View[]{pill, cardIcon, ballView, cardView};
         for (View v : targets) {
-            if (v == null || v.getVisibility() != View.VISIBLE) continue;
+            if (v == null || !v.isShown()) continue;
             int[] loc = new int[2];
             v.getLocationOnScreen(loc);
             Rect r = new Rect(loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight());
