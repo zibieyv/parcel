@@ -210,14 +210,14 @@ public class ParcelAccessibilityService extends AccessibilityService {
     private View buildPill() {
         TextView back = new TextView(this);
         back.setText("‹ 返回软件");
-        back.setTextSize(11);
+        // 和收起态的小球同宽（58dp），左对齐后两边正好平齐
+        back.setTextSize(9.5f);
         back.setSingleLine(true);
         back.setGravity(Gravity.CENTER);
-        back.setPadding(dp(12), dp(5), dp(12), dp(5));
+        back.setPadding(dp(2), dp(4), dp(2), dp(4));
         back.setTextColor(Color.parseColor("#20305e"));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
+                dp(58), LinearLayout.LayoutParams.WRAP_CONTENT);
         back.setLayoutParams(lp);
         GradientDrawable pill = new GradientDrawable();
         pill.setColor(Color.WHITE);
