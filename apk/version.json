@@ -1,6 +1,6 @@
 {
-  "versionCode": 13,
-  "versionName": "0.13",
-  "url": "/apk/parcel-0.13.apk",
-  "notes": "拖拽对位修正"
+  "versionCode": 14,
+  "versionName": "0.14",
+  "url": "/apk/parcel-0.14.apk",
+  "notes": "拖动时原地收起，不追手"
 }

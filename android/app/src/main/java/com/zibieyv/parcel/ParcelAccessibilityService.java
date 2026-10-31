@@ -146,14 +146,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
                         if (!dragging) {
                             dragging = Math.abs(e.getRawX() - downX) > dp(8)
                                     || Math.abs(e.getRawY() - downY) > dp(8);
-                            if (dragging) {
-                                if (expanded) collapseUnderFinger(e.getRawX(), e.getRawY());
-                                // 以当前位置为新基准，避免第一帧跳一下
-                                startX = params.x;
-                                startY = params.y;
-                                downX = e.getRawX();
-                                downY = e.getRawY();
-                            }
+                            // 原地收起：窗口坐标不动，保持手指和窗口的相对位置
+                            if (dragging && expanded) collapseInPlace();
                         }
                         params.x = startX + (int) (e.getRawX() - downX);
                         params.y = startY + (int) (e.getRawY() - downY);
@@ -324,24 +318,12 @@ public class ParcelAccessibilityService extends AccessibilityService {
     }
 
     /**
-     * 拖动开始时把展开态收成小球，并让**小球本身**正好落在手指底下。
-     * 之前用固定 29dp 当半高，忽略了上方「返回软件」的高度，所以会偏。
+     * 原地收起：只把内容换成小球，窗口坐标一点不动。
+     * 这样手指和窗口的距离跟按下时完全一致，不会追手。
      */
-    private void collapseUnderFinger(float rawX, float rawY) {
+    private void collapseInPlace() {
         expanded = false;
         rebuild();
-
-        int pillH = 0;
-        if (root.getChildCount() > 0) {
-            View pill = root.getChildAt(0);
-            pillH = pill.getMeasuredHeight() > 0 ? pill.getMeasuredHeight() : dp(24);
-        }
-        int ballTop = pillH + dp(6);      // 小球在容器内的 y 偏移
-        int ballSize = dp(58);
-
-        params.x = (int) (rawX - ballSize / 2f);
-        params.y = (int) (rawY - (ballTop + ballSize / 2f));
-        clampPosition();
         applyLayout();
     }
 
