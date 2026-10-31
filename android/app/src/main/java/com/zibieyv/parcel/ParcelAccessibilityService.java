@@ -2,12 +2,24 @@ package com.zibieyv.parcel;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -21,17 +33,19 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 读屏抓单号 + 悬浮球。
+ * 读屏抓单号 + 可展开的悬浮窗。
  *
- * 悬浮球常驻在购物软件上层：点一下就把当前页面的单号抠出来，
- * 确认后跳到「包裹」并预填添加表单。
+ * 收起态：只有一个大肥鱼头像，点它展开；
+ * 展开态：上面「‹ 返回软件」，下面白卡片带提示文字，点卡片里的鱼才去识屏。
  */
 public class ParcelAccessibilityService extends AccessibilityService {
 
@@ -44,15 +58,23 @@ public class ParcelAccessibilityService extends AccessibilityService {
             "(?<![A-Za-z0-9])([0-9]{12,18})(?![0-9])");
     private static final Pattern KEYWORD = Pattern.compile("快递|快件|运单|物流|包裹|已签收|运输中|派送|揽收");
 
+    private static final String HINT = "找到待收货包裹，在有快递单号的页面，点击大肥鱼添加包裹";
+
     private WindowManager wm;
-    private LinearLayout ballBox;
-    private WindowManager.LayoutParams ballParams;
-    private View card;
+    private LinearLayout root;
+    private WindowManager.LayoutParams params;
+    private View cardResult;
+    private boolean expanded = false;
+
     private int startX, startY;
     private float downX, downY;
     private long downTime;
 
+    /** 点哪个控件做什么 */
+    private final Map<View, Runnable> tapActions = new LinkedHashMap<>();
+
     private final Handler ui = new Handler(Looper.getMainLooper());
+    private final Runnable collapseTask = this::collapse;
 
     /* ---------------- 生命周期 ---------------- */
 
@@ -60,13 +82,14 @@ public class ParcelAccessibilityService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        showBall();
-        maybeShowHint();
+        buildRoot();
+        // 首次连上先展开提示，8 秒后自动收起
+        ui.postDelayed(this::collapse, 8000);
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // 目前不需要实时监听，点悬浮球时再扫，省电
+        // 点悬浮球时再扫屏，省电
     }
 
     @Override
@@ -75,142 +98,204 @@ public class ParcelAccessibilityService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
-        removeBall();
+        if (wm != null && root != null && root.getParent() != null) {
+            try { wm.removeView(root); } catch (Exception ignored) {}
+        }
+        removeCard();
         super.onDestroy();
     }
 
-    /* ---------------- 悬浮球 ---------------- */
+    /* ---------------- 布局 ---------------- */
 
     private int dp(float v) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v,
                 getResources().getDisplayMetrics());
     }
 
-    private void showBall() {
-        if (ballBox != null) return;
+    private void buildRoot() {
+        root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
 
-        ballBox = new LinearLayout(this);
-        ballBox.setOrientation(LinearLayout.VERTICAL);
-        ballBox.setGravity(Gravity.CENTER_HORIZONTAL);
-
-        TextView back = new TextView(this);
-        back.setText("‹ 返回软件");
-        back.setTextSize(11);
-        back.setSingleLine(true);
-        back.setMaxLines(1);
-        back.setTextColor(Color.parseColor("#20305e"));
-        back.setPadding(dp(10), dp(4), dp(10), dp(4));
-        GradientDrawable pill = new GradientDrawable();
-        pill.setColor(Color.WHITE);
-        pill.setCornerRadius(dp(12));
-        pill.setStroke(dp(1), Color.parseColor("#c9d6f0"));
-        back.setBackground(pill);
-
-        ImageView ball = new ImageView(this);
-        ball.setImageDrawable(roundedBall(dp(116)));
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(58), dp(58));
-        bp.topMargin = dp(6);
-        ball.setLayoutParams(bp);
-
-        ballBox.addView(back);
-        ballBox.addView(ball);
-        ballBox.measure(
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        final int pillH = Math.max(dp(20), back.getMeasuredHeight());
-
-        ballParams = new WindowManager.LayoutParams(
+        params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
-        ballParams.gravity = Gravity.TOP | Gravity.START;
-        ballParams.x = dp(2);
-        ballParams.y = (int) (getResources().getDisplayMetrics().heightPixels * 0.62);
+        params.gravity = Gravity.TOP | Gravity.START;
+        params.x = dp(2);
+        params.y = (int) (getResources().getDisplayMetrics().heightPixels * 0.55);
 
-        ballBox.setOnTouchListener((v, e) -> {
-            switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    startX = ballParams.x;
-                    startY = ballParams.y;
-                    downX = e.getRawX();
-                    downY = e.getRawY();
-                    downTime = System.currentTimeMillis();
-                    return true;
-                case MotionEvent.ACTION_MOVE:
-                    ballParams.x = startX + (int) (e.getRawX() - downX);
-                    ballParams.y = startY + (int) (e.getRawY() - downY);
-                    if (wm != null && ballBox.getParent() != null) {
-                        wm.updateViewLayout(ballBox, ballParams);
-                    }
-                    return true;
-                case MotionEvent.ACTION_UP: {
-                    float dx = Math.abs(e.getRawX() - downX);
-                    float dy = Math.abs(e.getRawY() - downY);
-                    boolean tap = dx < dp(8) && dy < dp(8)
-                            && System.currentTimeMillis() - downTime < 400;
-                    if (tap) {
-                        // 点在气泡条上 → 回 App；点在鱼上 → 抓单号
-                        float localY = e.getRawY() - ballParams.y;
-                        if (localY <= pillH + dp(2)) openApp();
-                        else onBallTap();
-                    }
-                    return true;
+        root.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent e) {
+                switch (e.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        startX = params.x;
+                        startY = params.y;
+                        downX = e.getRawX();
+                        downY = e.getRawY();
+                        downTime = System.currentTimeMillis();
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        params.x = startX + (int) (e.getRawX() - downX);
+                        params.y = startY + (int) (e.getRawY() - downY);
+                        if (root.getParent() != null) {
+                            try { wm.updateViewLayout(root, params); } catch (Exception ignored) {}
+                        }
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        float dx = Math.abs(e.getRawX() - downX);
+                        float dy = Math.abs(e.getRawY() - downY);
+                        if (dx < dp(8) && dy < dp(8)
+                                && System.currentTimeMillis() - downTime < 400) {
+                            handleTap(e.getRawX(), e.getRawY());
+                        }
+                        return true;
                 }
+                return false;
             }
-            return false;
         });
 
         try {
-            wm.addView(ballBox, ballParams);
+            wm.addView(root, params);
         } catch (Exception e) {
-            toast("悬浮球创建失败：" + e.getMessage());
+            toast("悬浮窗创建失败：" + e.getMessage());
+            return;
+        }
+        expanded = true;
+        render();
+    }
+
+    private void render() {
+        tapActions.clear();
+        root.removeAllViews();
+
+        root.addView(buildPill());
+        root.addView(expanded ? buildHintCard() : buildBall());
+
+        root.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        if (root.getParent() != null) {
+            try { wm.updateViewLayout(root, params); } catch (Exception ignored) {}
         }
     }
 
-    /** 把方图裁成圆角并描一圈边 */
-    private android.graphics.drawable.Drawable roundedBall(int sizePx) {
-        android.graphics.Bitmap src = android.graphics.BitmapFactory.decodeResource(
-                getResources(), R.drawable.ball);
-        android.graphics.Bitmap out = android.graphics.Bitmap.createBitmap(
-                sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888);
-        android.graphics.Canvas c = new android.graphics.Canvas(out);
-
-        float radius = sizePx * 0.28f;
-        android.graphics.Path path = new android.graphics.Path();
-        path.addRoundRect(new android.graphics.RectF(0, 0, sizePx, sizePx),
-                radius, radius, android.graphics.Path.Direction.CW);
-
-        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-        p.setFilterBitmap(true);
-        c.save();
-        c.clipPath(path);
-        c.drawBitmap(src,
-                new android.graphics.Rect(0, 0, src.getWidth(), src.getHeight()),
-                new android.graphics.Rect(0, 0, sizePx, sizePx), p);
-        c.restore();
-
-        // 先描一圈白边（让图在深色背景上也分得开），再描深蓝细边
-        android.graphics.Paint ring = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-        ring.setStyle(android.graphics.Paint.Style.STROKE);
-        ring.setStrokeWidth(sizePx * 0.075f);
-        ring.setColor(Color.WHITE);
-        c.drawPath(path, ring);
-
-        ring.setStrokeWidth(sizePx * 0.032f);
-        ring.setColor(Color.parseColor("#20305e"));
-        c.drawPath(path, ring);
-
-        return new android.graphics.drawable.BitmapDrawable(getResources(), out);
+    private View buildPill() {
+        TextView back = new TextView(this);
+        back.setText("‹ 返回软件");
+        back.setTextSize(11);
+        back.setSingleLine(true);
+        back.setGravity(Gravity.CENTER);
+        back.setPadding(dp(12), dp(5), dp(12), dp(5));
+        back.setTextColor(Color.parseColor("#20305e"));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        back.setLayoutParams(lp);
+        GradientDrawable pill = new GradientDrawable();
+        pill.setColor(Color.WHITE);
+        pill.setCornerRadius(dp(13));
+        pill.setStroke(dp(1), Color.parseColor("#c9d6f0"));
+        back.setBackground(pill);
+        tapActions.put(back, this::openApp);
+        return back;
     }
 
-    private void removeBall() {
-        if (wm != null && ballBox != null && ballBox.getParent() != null) {
-            try { wm.removeView(ballBox); } catch (Exception ignored) {}
+    private View buildBall() {
+        ImageView ball = new ImageView(this);
+        ball.setImageDrawable(roundedBall(dp(116)));
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(58), dp(58));
+        bp.topMargin = dp(6);
+        ball.setLayoutParams(bp);
+        tapActions.put(ball, this::expand);
+        return ball;
+    }
+
+    private View buildHintCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(10), dp(10), dp(8), dp(10));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.WHITE);
+        bg.setCornerRadius(dp(18));
+        bg.setStroke(dp(1), Color.parseColor("#d5dff2"));
+        card.setBackground(bg);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                dp(268), LinearLayout.LayoutParams.WRAP_CONTENT);
+        clp.topMargin = dp(6);
+        card.setLayoutParams(clp);
+
+        ImageView icon = new ImageView(this);
+        icon.setImageDrawable(roundedBall(dp(76)));
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(38), dp(38));
+        ip.rightMargin = dp(8);
+        card.addView(icon, ip);
+        tapActions.put(icon, this::onBallTap);
+
+        TextView tv = new TextView(this);
+        tv.setTextSize(12);
+        tv.setLineSpacing(dp(2), 1f);
+        tv.setText(highlight(HINT));
+        card.addView(tv);
+
+        // 空白处点一下也当作"抓单号"，跟点鱼一样
+        tapActions.put(card, this::onBallTap);
+        tapActions.put(tv, this::onBallTap);
+        return card;
+    }
+
+    /** 把提示里的关键词染成橙色，跟菜鸟一样 */
+    private CharSequence highlight(String text) {
+        SpannableString ss = new SpannableString(text);
+        int orange = Color.parseColor("#F5822B");
+        for (String kw : new String[]{"待收货包裹", "快递单号", "大肥鱼"}) {
+            int i = text.indexOf(kw);
+            if (i >= 0) {
+                ss.setSpan(new ForegroundColorSpan(orange), i, i + kw.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
         }
-        ballBox = null;
-        removeCard();
+        return ss;
+    }
+
+    /* ---------------- 点击分发 ---------------- */
+
+    private void handleTap(float rawX, float rawY) {
+        View best = null;
+        int bestArea = Integer.MAX_VALUE;
+        for (View v : tapActions.keySet()) {
+            int[] loc = new int[2];
+            v.getLocationOnScreen(loc);
+            Rect r = new Rect(loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight());
+            if (r.contains((int) rawX, (int) rawY)) {
+                int area = v.getWidth() * v.getHeight();
+                if (area < bestArea) {
+                    bestArea = area;
+                    best = v;
+                }
+            }
+        }
+        if (best != null) {
+            Runnable action = tapActions.get(best);
+            if (action != null) action.run();
+        }
+    }
+
+    private void expand() {
+        expanded = true;
+        render();
+        ui.removeCallbacks(collapseTask);
+        ui.postDelayed(collapseTask, 12000);
+    }
+
+    private void collapse() {
+        if (root == null) return;
+        expanded = false;
+        render();
     }
 
     private void openApp() {
@@ -227,20 +312,20 @@ public class ParcelAccessibilityService extends AccessibilityService {
             toast("没找到单号，把物流详情往上滚一下再点");
             return;
         }
-        showCard(no);
+        showResultCard(no);
     }
 
     private String scanScreen() {
-        AccessibilityNodeInfo root;
+        AccessibilityNodeInfo rootNode;
         try {
-            root = getRootInActiveWindow();
+            rootNode = getRootInActiveWindow();
         } catch (Exception e) {
             return null;
         }
-        if (root == null) return null;
+        if (rootNode == null) return null;
 
-        List<String[]> hits = new ArrayList<>(); // [单号, 上下文]
-        collect(root, hits, 0, new int[]{0});
+        List<String[]> hits = new ArrayList<>();
+        collect(rootNode, hits, 0, new int[]{0});
 
         String weak = null;
         for (String[] hit : hits) {
@@ -272,7 +357,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
                 StringBuilder ctx = new StringBuilder(text);
                 AccessibilityNodeInfo p = node.getParent();
                 for (int i = 0; p != null && i < 2; i++) {
-                    ctx.append(' ').append(textOf(p) == null ? "" : textOf(p));
+                    ctx.append(' ').append(textOf(p));
                     p = p.getParent();
                 }
                 for (String no : found) out.add(new String[]{no, ctx.toString()});
@@ -297,9 +382,9 @@ public class ParcelAccessibilityService extends AccessibilityService {
         return t == null ? "" : t.toString().trim();
     }
 
-    /* ---------------- 确认卡片 ---------------- */
+    /* ---------------- 结果卡片 ---------------- */
 
-    private void showCard(final String no) {
+    private void showResultCard(final String no) {
         removeCard();
 
         LinearLayout box = new LinearLayout(this);
@@ -362,8 +447,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
         box.addView(row);
 
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-                dp(220),
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                dp(224),
+                LinearLayout.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
@@ -373,7 +458,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
 
         try {
             wm.addView(box, p);
-            card = box;
+            cardResult = box;
         } catch (Exception e) {
             toast("弹卡片失败：" + e.getMessage());
         }
@@ -382,10 +467,10 @@ public class ParcelAccessibilityService extends AccessibilityService {
     }
 
     private void removeCard() {
-        if (card != null && card.getParent() != null && wm != null) {
-            try { wm.removeView(card); } catch (Exception ignored) {}
+        if (cardResult != null && cardResult.getParent() != null && wm != null) {
+            try { wm.removeView(cardResult); } catch (Exception ignored) {}
         }
-        card = null;
+        cardResult = null;
     }
 
     private static String esc(String s) {
@@ -393,64 +478,46 @@ public class ParcelAccessibilityService extends AccessibilityService {
     }
 
     private String sourceApp() {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) return "";
-        CharSequence pkg = root.getPackageName();
-        if (pkg == null) return "";
+        AccessibilityNodeInfo r = getRootInActiveWindow();
+        if (r == null || r.getPackageName() == null) return "";
         try {
             return getPackageManager().getApplicationLabel(
-                    getPackageManager().getApplicationInfo(pkg.toString(), 0)).toString();
+                    getPackageManager().getApplicationInfo(r.getPackageName().toString(), 0)).toString();
         } catch (Exception e) {
-            return pkg.toString();
+            return r.getPackageName().toString();
         }
     }
 
-    /* ---------------- 首次提示 ---------------- */
+    /* ---------------- 图标处理 ---------------- */
 
-    private void maybeShowHint() {
-        if (getSharedPreferences("parcel", MODE_PRIVATE).getBoolean("hint_shown", false)) return;
-        getSharedPreferences("parcel", MODE_PRIVATE).edit().putBoolean("hint_shown", true).apply();
+    /** 方图 → 圆角 + 白边 + 深蓝描边 */
+    private Drawable roundedBall(int sizePx) {
+        Bitmap src = BitmapFactory.decodeResource(getResources(), R.drawable.ball);
+        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(out);
 
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.HORIZONTAL);
-        box.setGravity(Gravity.CENTER_VERTICAL);
-        box.setPadding(dp(14), dp(12), dp(14), dp(12));
+        float radius = sizePx * 0.28f;
+        Path path = new Path();
+        path.addRoundRect(new RectF(0, 0, sizePx, sizePx), radius, radius, Path.Direction.CW);
 
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.WHITE);
-        bg.setCornerRadius(dp(18));
-        bg.setStroke(dp(1), Color.parseColor("#d5dff2"));
-        box.setBackground(bg);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setFilterBitmap(true);
+        c.save();
+        c.clipPath(path);
+        c.drawBitmap(src, new Rect(0, 0, src.getWidth(), src.getHeight()),
+                new Rect(0, 0, sizePx, sizePx), p);
+        c.restore();
 
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ball);
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(34), dp(34));
-        ip.rightMargin = dp(10);
-        box.addView(icon, ip);
+        Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
+        ring.setStyle(Paint.Style.STROKE);
+        ring.setStrokeWidth(sizePx * 0.075f);
+        ring.setColor(Color.WHITE);
+        c.drawPath(path, ring);
+        ring.setStrokeWidth(sizePx * 0.032f);
+        ring.setColor(Color.parseColor("#20305e"));
+        c.drawPath(path, ring);
 
-        TextView tv = new TextView(this);
-        tv.setText("找到待收货包裹，在有快递单号的页面，点击大肥鱼添加包裹");
-        tv.setTextSize(12);
-        tv.setTextColor(Color.parseColor("#3b4658"));
-        box.addView(tv);
-
-        WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-                dp(280),
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT);
-        p.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        p.y = dp(90);
-
-        try {
-            wm.addView(box, p);
-            ui.postDelayed(() -> {
-                if (box.getParent() != null) {
-                    try { wm.removeView(box); } catch (Exception ignored) {}
-                }
-            }, 8000);
-        } catch (Exception ignored) {}
+        return new BitmapDrawable(getResources(), out);
     }
 
     private void toast(String msg) {
