@@ -80,6 +80,7 @@ public class ScreenService extends Service {
     private boolean dragging;
 
     private TextRecognizer recognizer;
+    private Toast currentToast;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private BroadcastReceiver toggleReceiver;
 
@@ -221,6 +222,7 @@ public class ScreenService extends Service {
                         recycle(target);
                         return;
                     }
+                    cancelToast();
                     showResultCard(no);
                     recycle(target);
                 })
@@ -508,8 +510,15 @@ public class ScreenService extends Service {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
         p.gravity = Gravity.TOP | Gravity.START;
-        p.x = dp(12);
-        p.y = Math.max(dp(80), (int) (getResources().getDisplayMetrics().heightPixels * 0.42));
+
+        // 量一下高度，把卡片摆在展开提示的正上方、水平居中
+        box.measure(View.MeasureSpec.makeMeasureSpec(dp(224), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int cardH = box.getMeasuredHeight();
+        int anchorW = (expanded && cardWidthPx > 0) ? cardWidthPx : dp(58);
+        int centerX = (ballParams != null ? ballParams.x : 0) + anchorW / 2;
+        p.x = Math.max(dp(8), centerX - dp(112));
+        p.y = Math.max(dp(60), (ballParams != null ? ballParams.y : 0) - cardH - dp(10));
 
         try {
             wm.addView(box, p);
@@ -591,6 +600,18 @@ public class ScreenService extends Service {
     }
 
     private void toast(String msg) {
-        ui.post(() -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show());
+        ui.post(() -> {
+            try {
+                if (currentToast != null) currentToast.cancel();
+                currentToast = Toast.makeText(this, msg, Toast.LENGTH_SHORT);
+                currentToast.show();
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private void cancelToast() {
+        ui.post(() -> {
+            try { if (currentToast != null) currentToast.cancel(); } catch (Exception ignored) {}
+        });
     }
 }

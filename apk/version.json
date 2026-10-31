@@ -1,6 +1,6 @@
 {
-  "versionCode": 22,
-  "versionName": "0.22",
-  "url": "/apk/parcel-0.22.apk?v=22",
-  "notes": "恢复展开提示卡片"
+  "versionCode": 23,
+  "versionName": "0.23",
+  "url": "/apk/parcel-0.23.apk?v=23",
+  "notes": "UI 整理：卡片、筛选、权限面板"
 }

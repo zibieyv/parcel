@@ -331,6 +331,17 @@ public class MainActivity extends Activity implements Bridge.Sink {
         }
 
         @JavascriptInterface
+        public boolean smsGranted() {
+            return checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @JavascriptInterface
+        public boolean notifGranted() {
+            if (Build.VERSION.SDK_INT < 33) return true;
+            return checkSelfPermission("android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @JavascriptInterface
         public void setBallEnabled(boolean on) {
             BallPrefs.setEnabled(MainActivity.this, on);
             sendBroadcast(new Intent(BallPrefs.ACTION_CHANGED).setPackage(getPackageName()));

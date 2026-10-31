@@ -39,6 +39,12 @@ header{
 h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.5px}
 .hcount{font-size:12px;color:var(--dim);font-weight:400;margin-left:8px}
 .icon-btn{width:38px;height:38px;border-radius:12px;background:var(--card);display:grid;place-items:center;font-size:17px}
+.ball-pill{
+  display:flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:12px;
+  background:var(--card);border:1px solid var(--line);font-size:12px;color:#9db8ff;white-space:nowrap;
+}
+.ball-pill i{font-style:normal;font-size:13px}
+.ball-pill.off{color:var(--dim2)}
 .filters{display:flex;gap:8px;overflow-x:auto;padding:12px 0 2px;scrollbar-width:none}
 .filters::-webkit-scrollbar{display:none}
 .updatebar{
@@ -85,6 +91,14 @@ main{padding:14px 16px 0}
 .title{flex:1;min-width:0}
 .title b{display:block;font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .title b .nt{font-weight:400;font-size:13px;color:var(--dim)}
+.title .nm{font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.title .nt2{font-size:12px;color:var(--dim);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bodyRow{display:flex;gap:12px;margin-top:12px;align-items:flex-start}
+.leftCol{flex:0 0 96px;min-width:0}
+.leftCol .t{font-size:11px;color:var(--dim2);font-family:ui-monospace,monospace;line-height:1.4}
+.leftCol .c{font-size:11px;color:var(--dim2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rightCol{flex:1;min-width:0;font-size:13px;color:#c3cad6;line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .title .no{font-size:12px;color:var(--dim2);font-family:ui-monospace,Menlo,Consolas,monospace;margin-top:2px;letter-spacing:.3px}
 .status{font-size:12px;padding:4px 10px;border-radius:999px;background:#24304a;color:#9db8ff;white-space:nowrap}
 .status.delivered{background:#17351f;color:#6ee7a0}
@@ -160,12 +174,13 @@ main{padding:14px 16px 0}
   <div class="hrow">
     <h1>包裹<span class="hcount" id="cnt"></span></h1>
     <div style="display:flex;gap:8px">
-      <button class="icon-btn" id="ballBtn" title="悬浮球" style="display:none">◉</button>
+      <button class="ball-pill" id="ballBtn" title="悬浮球" style="display:none"><i id="ballDot">◉</i><span>悬浮球</span></button>
       <button class="icon-btn" id="refreshAll" title="全部刷新">↻</button>
       <button class="icon-btn" id="openSettings" title="设置">⚙</button>
     </div>
   </div>
-  <div class="filters" id="filters"></div>
+  <div class="filters" id="typeFilters"></div>
+  <div class="filters" id="groupFilters" style="padding-top:6px"></div>
 </header>
 
 <div class="updatebar" id="updateBar"></div>
@@ -180,16 +195,16 @@ main{padding:14px 16px 0}
 <div class="sheet" id="editSheet">
   <div class="panel">
     <h2><span id="editTitle">添加包裹</span><button class="x" data-close>取消</button></h2>
-    <div class="field"><label>内容物 / 名称</label><input id="f_name" placeholder="例：恋人不行 5-8"></div>
-    <div class="field"><label>快递单号</label><input id="f_no" placeholder="通过购物软件获取" autocapitalize="characters"></div>
+    <div class="field"><label>内容物 / 名称（可留空）</label><input id="f_name" placeholder="例：恋人不行 5-8"></div>
+    <div class="field"><label>快递单号（必填）</label><input id="f_no" placeholder="通过购物软件获取" autocapitalize="characters"></div>
     <div class="row2">
       <div class="field"><label>平台</label>
         <select id="f_platform">
+          <option value="other" selected>默认</option>
           <option value="taobao">淘宝</option><option value="jd">京东</option>
           <option value="pdd">拼多多</option><option value="douyin">抖音商城</option>
           <option value="taobaoflash">淘宝闪送</option><option value="meituan">美团外卖</option>
           <option value="jdwaimai">京东外卖</option><option value="books">博客来</option>
-          <option value="other">其他</option>
         </select>
       </div>
       <div class="field"><label>分组</label>
@@ -249,23 +264,15 @@ main{padding:14px 16px 0}
     <button class="primary" id="saveSettings">保存</button>
 
     <div id="appBox" style="display:none;margin-top:22px">
-      <div class="field"><label>取件码自动抓取（仅 App 内可用）</label></div>
-      <button class="ghost" id="notifBtn">开启「通知读取」权限</button>
-      <button class="ghost" id="smsBtn">检查短信权限</button>
+      <div class="field"><label>权限与系统能力</label></div>
+      <button class="ghost" id="permBtn">权限确认</button>
       <button class="ghost" id="checkUpdateBtn">检查更新</button>
-      <button class="ghost" id="accBtn">开启读屏权限（可选，更快更准）</button>
-      <button class="ghost" id="captureBtn">授权截屏（OCR 抓单号）</button>
-      <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;padding:12px;border-radius:12px;background:var(--card2);border:1px solid var(--line)">
-        <span style="font-size:14px">显示悬浮球</span>
-        <input type="checkbox" id="ballToggle" style="width:20px;height:20px;flex:0 0 auto">
-      </label>
       <p id="accState" style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:10px"></p>
-      <p id="notifState" style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:10px"></p>
     </div>
 
-    <a href="/apk/parcel-0.22.apk?v=22" download
+    <a href="/apk/parcel-0.23.apk?v=23" download
        style="display:block;text-align:center;margin-top:22px;padding:12px;border-radius:12px;background:var(--card2);border:1px solid var(--line);font-size:14px;color:#c8d0dc;text-decoration:none">
-      下载安卓 App（v0.22，截屏抓单号）
+      下载安卓 App（v0.23，截屏抓单号）
     </a>
 
     <div style="margin-top:22px;display:flex;gap:10px">
@@ -279,6 +286,17 @@ main{padding:14px 16px 0}
 </div>
 
 <input type="file" id="fileInput" accept="application/json" style="display:none">
+
+<!-- 权限确认 -->
+<div class="sheet" id="permSheet">
+  <div class="panel">
+    <h2><span>权限确认</span><button class="x" data-close>关闭</button></h2>
+    <div id="permList"></div>
+    <p style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:14px">
+      截图那条是系统弹的「开始录制或投放」，选「整个屏幕」即可；其余都是系统设置里的开关。
+    </p>
+  </div>
+</div>
 
 <!-- 分享 / 导入 -->
 <div class="sheet" id="shareSheet">
@@ -379,20 +397,29 @@ main{padding:14px 16px 0}
 
   function refreshFilters() {
     const types = [
-      ['all', '全部'], ['active', '在途'], ['pickup', '待取件'], ['delivered', '已签收'], ['archived', '已归档'],
+      ['all', '全部'], ['active', '在途'], ['pickup', '待取件'], ['archived', '已归档'],
     ];
-    let html = types.map(([k, n]) => `<button class="chip ${filter.type===k?'on':''}" data-f="${k}">${n}</button>`).join('');
+    const typeHtml = types
+      .map(([k, n]) => `<button class="chip ${filter.type===k?'on':''}" data-f="${k}">${n}</button>`)
+      .join('');
+
+    let groupHtml = `<button class="chip ${filter.type==='g:'?'on':''}" data-f="g:">未分组</button>`;
     for (const g of db.groups) {
-      html += `<button class="chip ${filter.type==='g:'+g?'on':''}" data-f="g:${esc(g)}">${esc(g)}</button>`;
+      groupHtml += `<button class="chip ${filter.type==='g:'+g?'on':''}" data-f="g:${esc(g)}">${esc(g)}</button>`;
     }
-    $('filters').innerHTML = html;
-    $('filters').onclick = (e) => {
+
+    $('typeFilters').innerHTML = typeHtml;
+    $('groupFilters').innerHTML = groupHtml;
+
+    const onClick = (e) => {
       const b = e.target.closest('[data-f]');
       if (!b) return;
       filter.type = b.dataset.f;
       refreshFilters();
       render();
     };
+    $('typeFilters').onclick = onClick;
+    $('groupFilters').onclick = onClick;
   }
 
   /* ---------- 列表 ---------- */
@@ -405,7 +432,7 @@ main{padding:14px 16px 0}
       list = all.filter((i) => !i.archived);
       if (filter.type === 'active') list = list.filter((i) => !['delivered', 'exception'].includes(i.status));
       else if (filter.type === 'pickup') list = list.filter((i) => i.status === 'pickup' || (i.pickup && i.status !== 'delivered'));
-      else if (filter.type === 'delivered') list = list.filter((i) => i.status === 'delivered');
+      else if (filter.type === 'g:') list = list.filter((i) => !i.group);
       else if (filter.type.startsWith('g:')) list = list.filter((i) => i.group === filter.type.slice(2));
     }
     return list.sort((a, b) => {
@@ -442,18 +469,25 @@ main{padding:14px 16px 0}
         <span>取件码</span><b>${esc(it.pickup)}</b>
       </div>` : '';
     const when = it.latestTime ? fmtTime(it.latestTime) : (it.updatedAt ? fmtTime(it.updatedAt) : '');
+    const note = it.note ? String(it.note).replace(/\s+/g, ' ') : '';
     return `
       <div class="card ${cls}" data-id="${it.id}">
         <div class="top">
           <span class="pf">${esc(PLATFORM_NAME[it.platform] || '其他')}</span>
           <div class="title">
-            <b>${esc(it.name || it.no || '未命名')}${it.note ? `<span class="nt">&nbsp;&nbsp;备注：${esc(String(it.note).replace(/\s+/g, ' '))}</span>` : ''}</b>
+            <b class="nm">${esc(it.name || it.no || '未命名')}</b>
+            ${note ? `<div class="nt2">备注：${esc(note)}</div>` : ''}
             ${it.no ? `<div class="no">${esc(it.no)}</div>` : ''}
           </div>
           <span class="status ${st}">${esc(STATUS_NAME[st] || st)}</span>
         </div>
-        ${it.latest ? `<div class="latest">${esc(it.latest)}</div>` : ''}
-        ${when ? `<div class="meta">${esc(when)}${it.carrier ? ' · ' + esc(it.carrier) : ''}</div>` : ''}
+        <div class="bodyRow">
+          <div class="leftCol">
+            <div class="t">${esc(when || '—')}</div>
+            <div class="c">${esc(it.carrier || '')}</div>
+          </div>
+          <div class="rightCol">${esc(it.latest || '暂无轨迹')}</div>
+        </div>
         ${pickup}
         <div class="acts">
           <button data-act="refresh">刷新轨迹</button>
@@ -625,7 +659,7 @@ main{padding:14px 16px 0}
   $('saveItem').onclick = () => {
     const name = $('f_name').value.trim();
     const no = $('f_no').value.trim().toUpperCase().replace(/\s+/g, '');
-    if (!name && !no) return toast('至少填个名字或单号');
+    if (!no) return toast('快递单号必填');
     const data = {
       name, no,
       platform: $('f_platform').value,
@@ -999,19 +1033,18 @@ main{padding:14px 16px 0}
     $('accFix').onclick = () => window.Native.openAccessibilitySettings();
   }
 
-  /* ---------- 悬浮球开关（首页按钮 + 设置开关，两处同步） ---------- */
+  /* ---------- 悬浮球开关（首页按钮） ---------- */
   function syncBallUI() {
     if (!window.Native || !window.Native.ballEnabled) return;
     let on = true;
     try { on = window.Native.ballEnabled(); } catch (e) { return; }
     const btn = $('ballBtn');
     if (!btn) return;
-    btn.style.display = 'grid';
-    btn.textContent = on ? '◉' : '◎';
-    btn.style.color = on ? '#9db8ff' : '#5f6875';
+    btn.style.display = 'flex';
+    btn.classList.toggle('off', !on);
+    const dot = $('ballDot');
+    if (dot) dot.textContent = on ? '◉' : '◎';
     btn.title = on ? '悬浮球显示中，点此隐藏' : '悬浮球已隐藏，点此显示';
-    const sw = $('ballToggle');
-    if (sw) sw.checked = on;
   }
 
   function toggleBall() {
@@ -1024,6 +1057,39 @@ main{padding:14px 16px 0}
       toast(!on ? '悬浮球已显示' : '悬浮球已隐藏');
     } catch (e) { toast('切换失败'); }
   }
+
+  /* ---------- 弹层：滑到顶再往下拉就关掉 ---------- */
+  (function setupSheetDrag() {
+    let panel = null, startY = null, dist = 0;
+
+    document.addEventListener('touchstart', (e) => {
+      const p = e.target.closest('.sheet.on .panel');
+      if (!p || e.touches.length !== 1) return;
+      panel = p;
+      startY = e.touches[0].clientY;
+      dist = 0;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!panel || startY === null) return;
+      if (panel.scrollTop > 0) { panel = null; return; }
+      const dy = e.touches[0].clientY - startY;
+      if (dy <= 0) { dist = 0; return; }
+      dist = dy;
+      if (dy > 6) e.preventDefault();
+      panel.style.transform = `translateY(${Math.min(90, dy * 0.6)}px)`;
+    }, { passive: false });
+
+    document.addEventListener('touchend', () => {
+      if (panel) {
+        panel.style.transform = '';
+        if (dist > 80) closeSheets();
+      }
+      panel = null;
+      startY = null;
+      dist = 0;
+    });
+  })();
 
   /* ---------- 下拉刷新（网页/WebView 通用，不用杀后台） ---------- */
   (function setupPull() {
@@ -1042,6 +1108,8 @@ main{padding:14px 16px 0}
 
     document.addEventListener('touchstart', (e) => {
       if (busy || window.scrollY > 2 || e.touches.length !== 1) return;
+      // 弹层打开时不触发下拉刷新（这也是之前"设置页下不去"的原因）
+      if (document.querySelector('.sheet.on')) return;
       startY = e.touches[0].clientY;
       dist = 0;
       active = true;
@@ -1147,41 +1215,62 @@ main{padding:14px 16px 0}
   /* ---------- App 内才显示的功能 ---------- */
   if (window.Native) {
     $('appBox').style.display = 'block';
-    $('notifBtn').onclick = () => window.Native.openNotificationSettings();
-    $('smsBtn').onclick = () => window.Native.openAppSettings();
     $('checkUpdateBtn').onclick = () => checkUpdate(false);
-    $('accBtn').onclick = () => window.Native.openAccessibilitySettings();
-    if ($('captureBtn')) {
-      $('captureBtn').onclick = () => {
-        if (window.Native.requestCapture) window.Native.requestCapture();
-        else toast('这个版本还不支持，先更新 App');
-      };
-    }
+    $('permBtn').onclick = () => openPermSheet();
     $('ballBtn').onclick = () => toggleBall();
     syncBallUI();
     try {
-      const bt = $('ballToggle');
-      if (window.Native.ballEnabled) bt.checked = window.Native.ballEnabled();
-      bt.onchange = () => {
-        try {
-          window.Native.setBallEnabled(bt.checked);
-          syncBallUI();
-          toast(bt.checked ? '悬浮球已显示' : '悬浮球已隐藏');
-        } catch (e) { toast('切换失败'); }
-      };
-    } catch { /* 老版本没有 */ }
-    try {
       const acc = window.Native.accessibilityEnabled();
       $('accState').textContent = acc
-        ? '读屏：已开启。去淘宝/抖音的物流详情页，点左边的大肥鱼就能抓单号。'
-        : '读屏：未开启。点上面按钮 → 无障碍里找到「包裹」→ 打开。';
+        ? '读屏已开启，抓单号会优先用它（更快更准）。'
+        : '读屏未开启，抓单号会走截屏 OCR。';
     } catch { /* 老版本没有 */ }
-    try {
-      const on = window.Native.notificationAccessEnabled();
-      $('notifState').textContent = on
-        ? '通知读取：已开启。丰巢、菜鸟、淘宝等推送里的取件码会自动填进来。'
-        : '通知读取：未开启。点上面的按钮，在列表里找到「包裹」打开开关。';
-    } catch { /* 老版本 App 没有这个方法 */ }
+  }
+
+  /* ---------- 权限确认面板 ---------- */
+  function permRow(name, desc, ok, actionLabel, onAction) {
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px">${esc(name)}</div>
+        <div style="font-size:12px;color:var(--dim2);margin-top:3px">${esc(desc)}</div>
+      </div>
+      <button class="ghost" style="width:auto;margin:0;padding:8px 14px;flex:0 0 auto"
+        data-perm="${esc(name)}">${esc(ok ? '已开启' : actionLabel)}</button>
+    </div>`;
+  }
+
+  function openPermSheet() {
+    const rows = [];
+    let sms = true, notif = true, acc = false, running = false;
+    try { if (window.Native.smsGranted) sms = window.Native.smsGranted(); } catch (e) {}
+    try { if (window.Native.notifGranted) notif = window.Native.notifGranted(); } catch (e) {}
+    try { acc = window.Native.accessibilityEnabled(); } catch (e) {}
+    try { if (window.Native.accessibilityRunning) running = window.Native.accessibilityRunning(); } catch (e) {}
+
+    rows.push(permRow('通知读取', '丰巢/菜鸟/淘宝推送里的取件码', notif, '去开启'));
+    rows.push(permRow('短信', '驿站、快递公司的取件短信', sms, '去开启'));
+    rows.push(permRow('读屏（可选）', acc ? (running ? '已开启且正在运行' : '权限在，但服务被系统杀了') : '未开启，抓单号会走截屏 OCR', acc && running, acc ? '去查看' : '去开启'));
+    rows.push(permRow('截屏 OCR', '点球截图后本地识别单号', false, '重新授权'));
+
+    const box = $('permList');
+    box.innerHTML = rows.join('');
+
+    box.querySelectorAll('[data-perm]').forEach((btn) => {
+      const name = btn.dataset.perm;
+      btn.onclick = () => {
+        try {
+          if (name === '通知读取') window.Native.openNotificationSettings();
+          else if (name === '短信') window.Native.openAppSettings();
+          else if (name === '读屏（可选）') window.Native.openAccessibilitySettings();
+          else if (name === '截屏 OCR') {
+            if (window.Native.requestCapture) window.Native.requestCapture();
+            else toast('先更新 App');
+          }
+        } catch (e) { toast('打不开设置'); }
+      };
+    });
+
+    openSheet('permSheet');
   }
 })();
 </script>
