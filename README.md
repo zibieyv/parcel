@@ -74,3 +74,47 @@ node test/local-test.js
 ## 额度说明
 
 免费额度约 200 单/月，**每次请求算一次查询**。所以手机端别做"每分钟自动轮询"，用刷新按钮手动触发，或者打开 App 时刷一次即可。
+
+---
+
+# 手机端
+
+两种用法，数据不互通（localStorage 按域名隔离），选一个用到底：
+
+## 用法 A：网页（零安装）
+
+浏览器打开 `https://parcel.zibieyv.com`，⚙ 里填 `APP_TOKEN`，然后「添加到主屏幕」。
+
+能存单号、备注、分组、取件码、看轨迹。**取件码只能手填。**
+
+## 用法 B：APK（能自动抓取件码）
+
+`android/` 目录，WebView 套同一个网页，多了两件事：
+
+- **短信**：`SmsReceiver` 读丰巢/驿站发来的取件码短信
+- **通知**：`NotifListener` 读淘宝/京东/拼多多/抖音/丰巢/菜鸟的取件推送
+
+抓到的码会通过 `window.__onPickupCode(code, source)` 交给网页；网页面里：
+
+- 有在途包裹且没填码 → 自动填给最新的那件
+- 没有 → 进顶部「待认领」卡片，点一下应用
+
+装完要去两处开权限：
+
+1. App 内 ⚙ → 「开启通知读取权限」→ 找到「包裹」打开
+2. 首次启动会请求短信权限，允许
+
+### 编译
+
+```bash
+python scripts/build_apk.py          # 本机编译（会下载 JDK17 + SDK + Gradle）
+```
+
+产物：`android/app/build/outputs/apk/debug/app-debug.apk`
+
+也可以推上 GitHub 用 Actions 编（`.github/workflows/android.yml`），但 token 需要勾 **workflow** 权限才能提交这个文件。
+
+## 数据在哪
+
+在手机浏览器的 localStorage（APK 里是 WebView 的存储）。换域名、清缓存、卸载都会丢。⚙ 里可以导出/导入 JSON 备份。
+
