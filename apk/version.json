@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
-  "versionName": "0.7",
-  "url": "/apk/parcel-0.7.apk",
-  "notes": "读屏抓单号 + 悬浮球"
+  "versionCode": 8,
+  "versionName": "0.8",
+  "url": "/apk/parcel-0.8.apk",
+  "notes": "悬浮球可点、圆角描边"
 }

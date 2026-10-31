@@ -96,6 +96,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
         TextView back = new TextView(this);
         back.setText("‹ 返回软件");
         back.setTextSize(11);
+        back.setSingleLine(true);
+        back.setMaxLines(1);
         back.setTextColor(Color.parseColor("#20305e"));
         back.setPadding(dp(10), dp(4), dp(10), dp(4));
         GradientDrawable pill = new GradientDrawable();
@@ -103,17 +105,19 @@ public class ParcelAccessibilityService extends AccessibilityService {
         pill.setCornerRadius(dp(12));
         pill.setStroke(dp(1), Color.parseColor("#c9d6f0"));
         back.setBackground(pill);
-        back.setOnClickListener(v -> openApp());
 
         ImageView ball = new ImageView(this);
-        ball.setImageResource(R.drawable.ball);
-        ball.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        ball.setImageDrawable(roundedBall(dp(116)));
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(58), dp(58));
         bp.topMargin = dp(6);
         ball.setLayoutParams(bp);
 
         ballBox.addView(back);
         ballBox.addView(ball);
+        ballBox.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        final int pillH = Math.max(dp(20), back.getMeasuredHeight());
 
         ballParams = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -141,13 +145,19 @@ public class ParcelAccessibilityService extends AccessibilityService {
                         wm.updateViewLayout(ballBox, ballParams);
                     }
                     return true;
-                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_UP: {
                     float dx = Math.abs(e.getRawX() - downX);
                     float dy = Math.abs(e.getRawY() - downY);
-                    if (dx < dp(8) && dy < dp(8) && System.currentTimeMillis() - downTime < 400) {
-                        onBallTap();
+                    boolean tap = dx < dp(8) && dy < dp(8)
+                            && System.currentTimeMillis() - downTime < 400;
+                    if (tap) {
+                        // 点在气泡条上 → 回 App；点在鱼上 → 抓单号
+                        float localY = e.getRawY() - ballParams.y;
+                        if (localY <= pillH + dp(2)) openApp();
+                        else onBallTap();
                     }
                     return true;
+                }
             }
             return false;
         });
@@ -157,6 +167,42 @@ public class ParcelAccessibilityService extends AccessibilityService {
         } catch (Exception e) {
             toast("悬浮球创建失败：" + e.getMessage());
         }
+    }
+
+    /** 把方图裁成圆角并描一圈边 */
+    private android.graphics.drawable.Drawable roundedBall(int sizePx) {
+        android.graphics.Bitmap src = android.graphics.BitmapFactory.decodeResource(
+                getResources(), R.drawable.ball);
+        android.graphics.Bitmap out = android.graphics.Bitmap.createBitmap(
+                sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(out);
+
+        float radius = sizePx * 0.28f;
+        android.graphics.Path path = new android.graphics.Path();
+        path.addRoundRect(new android.graphics.RectF(0, 0, sizePx, sizePx),
+                radius, radius, android.graphics.Path.Direction.CW);
+
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        p.setFilterBitmap(true);
+        c.save();
+        c.clipPath(path);
+        c.drawBitmap(src,
+                new android.graphics.Rect(0, 0, src.getWidth(), src.getHeight()),
+                new android.graphics.Rect(0, 0, sizePx, sizePx), p);
+        c.restore();
+
+        // 先描一圈白边（让图在深色背景上也分得开），再描深蓝细边
+        android.graphics.Paint ring = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        ring.setStyle(android.graphics.Paint.Style.STROKE);
+        ring.setStrokeWidth(sizePx * 0.075f);
+        ring.setColor(Color.WHITE);
+        c.drawPath(path, ring);
+
+        ring.setStrokeWidth(sizePx * 0.032f);
+        ring.setColor(Color.parseColor("#20305e"));
+        c.drawPath(path, ring);
+
+        return new android.graphics.drawable.BitmapDrawable(getResources(), out);
     }
 
     private void removeBall() {
