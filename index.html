@@ -901,6 +901,8 @@ main{padding:14px 16px 0}
       const idx = db.groups.indexOf(groupEditing);
       if (idx >= 0) db.groups[idx] = name;
       db.items.forEach((it) => { if (it.group === groupEditing) it.group = name; });
+      // 改的正好是家庭码绑定的分组 → 绑定名跟着改，不然同步会断
+      if (db.settings.roomGroup === groupEditing) db.settings.roomGroup = name;
     } else {
       db.groups.push(name);
     }
@@ -918,6 +920,10 @@ main{padding:14px 16px 0}
     if (!confirm(`删除分组「${groupEditing}」？里面的包裹会变成未分组`)) return;
     db.groups = db.groups.filter((g) => g !== groupEditing);
     db.items.forEach((it) => { if (it.group === groupEditing) it.group = ''; });
+    if (db.settings.roomGroup === groupEditing) {
+      db.settings.roomGroup = '';
+      db.settings.room = '';
+    }
     save(); refreshFilters(); render(); closeSheets(); toast('已删除');
   };
 
