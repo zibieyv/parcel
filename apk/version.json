@@ -1,6 +1,6 @@
 {
-  "versionCode": 24,
-  "versionName": "0.24",
-  "url": "/apk/parcel-0.24.apk?v=24",
-  "notes": "截屏默认整屏，去掉无障碍提醒"
+  "versionCode": 25,
+  "versionName": "0.25",
+  "url": "/apk/parcel-0.25.apk?v=25",
+  "notes": "OCR 纠错：O/0、I/1、S/5 混认也能认出单号"
 }

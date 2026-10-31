@@ -40,10 +40,90 @@ final class CodeParser {
 
     static String findTracking(String text) {
         if (text == null || text.isEmpty()) return null;
+        String direct = strictTracking(text);
+        if (direct != null) return direct;
+
+        // OCR 会把 O 认成 0、S 认成 5 之类，按位置纠一遍再匹配
+        String[] tokens = text.split("[^A-Za-z0-9]+");
+        for (String token : tokens) {
+            if (token.length() < 8 || token.length() > 20) continue;
+            String fixed = coerceToken(token);
+            if (fixed == null || fixed.equalsIgnoreCase(token)) continue;
+            String hit = strictTracking(fixed);
+            if (hit != null) return hit;
+        }
+        return null;
+    }
+
+    private static String strictTracking(String text) {
         for (Pattern p : TRACKING_PATTERNS) {
             Matcher m = p.matcher(text);
             if (m.find()) return m.group(1).toUpperCase();
         }
+        return null;
+    }
+
+    private static final String LETTER_TO_DIGIT = "OILSBZGQ";
+    private static final String DIGIT_TO_LETTER = "01158269";
+
+    private static char toDigit(char c) {
+        if (c >= '0' && c <= '9') return c;
+        int i = LETTER_TO_DIGIT.indexOf(c);
+        return i >= 0 ? DIGIT_TO_LETTER.charAt(i) : c;
+    }
+
+    private static char toLetter(char c) {
+        if (c >= 'A' && c <= 'Z') return c;
+        switch (c) {
+            case '0': return 'O';
+            case '1': return 'I';
+            case '5': return 'S';
+            case '8': return 'B';
+            case '2': return 'Z';
+            case '6': return 'G';
+            case '9': return 'Q';
+            default: return c;
+        }
+    }
+
+    /**
+     * 按常见单号形状纠正 OCR 错认：
+     *  - 两字母 + 9 位数字 + 两字母（国际邮政，如 EZ001649959TW）
+     *  - 字母前缀 + 数字（YT/JT/SF/JD…）
+     *  - 纯数字（12–18 位）
+     */
+    private static String coerceToken(String token) {
+        String t = token.toUpperCase();
+        int n = t.length();
+
+        // 国际邮政：2 + 9 + 2
+        if (n == 13) {
+            StringBuilder sb = new StringBuilder(n);
+            sb.append(toLetter(t.charAt(0))).append(toLetter(t.charAt(1)));
+            for (int i = 2; i < 11; i++) sb.append(toDigit(t.charAt(i)));
+            sb.append(toLetter(t.charAt(11))).append(toLetter(t.charAt(12)));
+            return sb.toString();
+        }
+
+        // 带字母前缀：取前 2–3 个字母，其余按数字纠
+        if (n >= 10 && n <= 18) {
+            int p = 0;
+            while (p < n && p < 3 && (t.charAt(p) >= 'A' && t.charAt(p) <= 'Z')) p++;
+            if (p >= 2) {
+                StringBuilder sb = new StringBuilder(n);
+                sb.append(t, 0, p);
+                for (int i = p; i < n; i++) sb.append(toDigit(t.charAt(i)));
+                return sb.toString();
+            }
+        }
+
+        // 纯数字形状（全是数字或数字+易混字母）
+        if (n >= 12 && n <= 18) {
+            StringBuilder sb = new StringBuilder(n);
+            for (int i = 0; i < n; i++) sb.append(toDigit(t.charAt(i)));
+            return sb.toString();
+        }
+
         return null;
     }
 
