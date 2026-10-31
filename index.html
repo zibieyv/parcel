@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0f1115">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>鍖呰９</title>
+<title>包裹</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <style>
@@ -30,7 +30,7 @@ input,select,textarea{
 input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 textarea{resize:vertical;min-height:64px}
 
-/* 椤舵爮 */
+/* 顶栏 */
 header{
   position:sticky;top:0;z-index:20;background:rgba(15,17,21,.92);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--line);padding:14px 16px 10px;
@@ -47,7 +47,7 @@ h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.5px}
 }
 .chip.on{background:#1b2740;border-color:#2f4d85;color:#a8c4ff}
 
-/* 鍒楄〃 */
+/* 列表 */
 main{padding:14px 16px 0}
 .card{
   background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
@@ -85,14 +85,14 @@ main{padding:14px 16px 0}
 .empty{text-align:center;color:var(--dim2);padding:70px 20px;font-size:14px;line-height:2}
 .empty b{display:block;font-size:44px;margin-bottom:10px;opacity:.5}
 
-/* 搴曢儴鎸夐挳 */
+/* 底部按钮 */
 .fab{
   position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--safe-b));
   background:var(--accent);color:#fff;border-radius:999px;padding:14px 30px;font-weight:600;
   box-shadow:0 8px 24px rgba(61,126,255,.4);z-index:30;font-size:15px;
 }
 
-/* 寮瑰眰 */
+/* 弹层 */
 .sheet{
   position:fixed;inset:0;z-index:50;display:none;
   background:rgba(0,0,0,.55);backdrop-filter:blur(2px);
@@ -113,7 +113,7 @@ main{padding:14px 16px 0}
 .danger{color:#ff8a8a}
 .ghost{width:100%;padding:12px;border-radius:12px;background:var(--card2);border:1px solid var(--line);margin-top:8px;font-size:14px}
 
-/* 璇︽儏鏃堕棿绾?*/
+/* 详情时间线 */
 .tl{margin-top:8px}
 .tl .ev{padding:12px 0 12px 18px;border-left:2px solid var(--line);position:relative}
 .tl .ev:last-child{border-left-color:transparent}
@@ -134,10 +134,10 @@ main{padding:14px 16px 0}
 
 <header>
   <div class="hrow">
-    <h1>鍖呰９<span class="hcount" id="cnt"></span></h1>
+    <h1>包裹<span class="hcount" id="cnt"></span></h1>
     <div style="display:flex;gap:8px">
-      <button class="icon-btn" id="refreshAll" title="鍏ㄩ儴鍒锋柊">鈫?/button>
-      <button class="icon-btn" id="openSettings" title="璁剧疆">鈿?/button>
+      <button class="icon-btn" id="refreshAll" title="全部刷新">↻</button>
+      <button class="icon-btn" id="openSettings" title="设置">⚙</button>
     </div>
   </div>
   <div class="filters" id="filters"></div>
@@ -145,73 +145,75 @@ main{padding:14px 16px 0}
 
 <main id="list"></main>
 
-<button class="fab" id="addBtn">锛?娣诲姞鍖呰９</button>
+<button class="fab" id="addBtn">＋ 添加包裹</button>
 
-<!-- 娣诲姞/缂栬緫 -->
+<!-- 添加/编辑 -->
 <div class="sheet" id="editSheet">
   <div class="panel">
-    <h2><span id="editTitle">娣诲姞鍖呰９</span><button class="x" data-close>鍙栨秷</button></h2>
-    <div class="field"><label>鍐呭鐗?/ 鍚嶇О</label><input id="f_name" placeholder="渚嬶細鎭嬩汉涓嶈 5-8"></div>
-    <div class="field"><label>蹇€掑崟鍙?/label><input id="f_no" placeholder="EB123456789TW" autocapitalize="characters"></div>
+    <h2><span id="editTitle">添加包裹</span><button class="x" data-close>取消</button></h2>
+    <div class="field"><label>内容物 / 名称</label><input id="f_name" placeholder="例：恋人不行 5-8"></div>
+    <div class="field"><label>快递单号</label><input id="f_no" placeholder="EB123456789TW" autocapitalize="characters"></div>
     <div class="row2">
-      <div class="field"><label>骞冲彴</label>
+      <div class="field"><label>平台</label>
         <select id="f_platform">
-          <option value="taobao">娣樺疂</option><option value="jd">浜笢</option>
-          <option value="pdd">鎷煎澶?/option><option value="douyin">鎶栭煶鍟嗗煄</option>
-          <option value="taobaoflash">娣樺疂闂€?/option><option value="meituan">缇庡洟澶栧崠</option>
-          <option value="jdwaimai">浜笢澶栧崠</option><option value="books">鍗氬鏉?/option>
-          <option value="other">鍏朵粬</option>
+          <option value="taobao">淘宝</option><option value="jd">京东</option>
+          <option value="pdd">拼多多</option><option value="douyin">抖音商城</option>
+          <option value="taobaoflash">淘宝闪送</option><option value="meituan">美团外卖</option>
+          <option value="jdwaimai">京东外卖</option><option value="books">博客来</option>
+          <option value="other">其他</option>
         </select>
       </div>
-      <div class="field"><label>鍒嗙粍</label>
+      <div class="field"><label>分组</label>
         <select id="f_group"></select>
       </div>
     </div>
-    <div class="field"><label>鍙栦欢鐮侊紙澶у鐣欑┖锛屽埌绔欎細鑷姩濉級</label><input id="f_pickup" placeholder="6-4-12003"></div>
-    <div class="field"><label>澶囨敞</label><textarea id="f_note" placeholder="鏀惧摢涓┛绔?/ 缁欒皝鐨?/ 澶氬皯閽?></textarea></div>
-    <button class="primary" id="saveItem">淇濆瓨</button>
-    <button class="ghost danger" id="delItem" style="display:none">鍒犻櫎杩欎釜鍖呰９</button>
+    <div class="field"><label>取件码（大多留空，到站会自动填）</label><input id="f_pickup" placeholder="6-4-12003"></div>
+    <div class="field"><label>备注</label><textarea id="f_note" placeholder="放哪个驿站 / 给谁的 / 多少钱"></textarea></div>
+    <button class="primary" id="saveItem">保存</button>
+    <button class="ghost danger" id="delItem" style="display:none">删除这个包裹</button>
   </div>
 </div>
 
-<!-- 璇︽儏 -->
+<!-- 详情 -->
 <div class="sheet" id="detailSheet">
   <div class="panel">
-    <h2><span id="d_title">杞ㄨ抗</span><button class="x" data-close>鍏抽棴</button></h2>
+    <h2><span id="d_title">轨迹</span><button class="x" data-close>关闭</button></h2>
     <div id="d_body"></div>
   </div>
 </div>
 
-<!-- 璁剧疆 -->
+<!-- 设置 -->
 <div class="sheet" id="setSheet">
   <div class="panel">
-    <h2><span>璁剧疆</span><button class="x" data-close>鍏抽棴</button></h2>
-    <div class="field"><label>鎺ュ彛鍦板潃</label><input id="s_base" placeholder="https://parcel-seven-omega.vercel.app"></div>
-    <div class="field"><label>APP_TOKEN</label><input id="s_token" placeholder="涓?Vercel 鐜鍙橀噺涓€鑷?></div>
-    <button class="primary" id="saveSettings">淇濆瓨</button>
+    <h2><span>设置</span><button class="x" data-close>关闭</button></h2>
+    <div class="field"><label>接口地址</label><input id="s_base" placeholder="https://parcel-seven-omega.vercel.app"></div>
+    <div class="field"><label>APP_TOKEN</label><input id="s_token" placeholder="与 Vercel 环境变量一致"></div>
+    <button class="primary" id="saveSettings">保存</button>
 
-    <div class="field" style="margin-top:22px"><label>鍒嗙粍锛堜竴琛屼竴涓級</label>
-      <textarea id="s_groups" placeholder="鎴戠殑&#10;瀹朵汉鐨?#10;鍗氬鏉?></textarea>
+    <div class="field" style="margin-top:22px"><label>分组（一行一个）</label>
+      <textarea id="s_groups" placeholder="我的&#10;家人的&#10;博客来"></textarea>
     </div>
-    <button class="ghost" id="saveGroups">淇濆瓨鍒嗙粍</button>
+    <button class="ghost" id="saveGroups">保存分组</button>
 
     <div id="appBox" style="display:none;margin-top:22px">
-      <div class="field"><label>鍙栦欢鐮佽嚜鍔ㄦ姄鍙栵紙浠?App 鍐呭彲鐢級</label></div>
-      <button class="ghost" id="notifBtn">寮€鍚€岄€氱煡璇诲彇銆嶆潈闄?/button>
-      <button class="ghost" id="smsBtn">妫€鏌ョ煭淇℃潈闄?/button>
+      <div class="field"><label>取件码自动抓取（仅 App 内可用）</label></div>
+      <button class="ghost" id="notifBtn">开启「通知读取」权限</button>
+      <button class="ghost" id="smsBtn">检查短信权限</button>
       <p id="notifState" style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:10px"></p>
     </div>
 
     <a href="/apk/parcel-0.3.apk" download
        style="display:block;text-align:center;margin-top:22px;padding:12px;border-radius:12px;background:var(--card2);border:1px solid var(--line);font-size:14px;color:#c8d0dc;text-decoration:none">
-      涓嬭浇瀹夊崜 App锛坴0.1锛屽彲鑷姩鎶撳彇浠剁爜锛?    </a>
+      下载安卓 App（v0.3，可自动抓取件码）
+    </a>
 
     <div style="margin-top:22px;display:flex;gap:10px">
-      <button class="ghost" id="exportData">瀵煎嚭澶囦唤</button>
-      <button class="ghost" id="importData">瀵煎叆澶囦唤</button>
+      <button class="ghost" id="exportData">导出备份</button>
+      <button class="ghost" id="importData">导入备份</button>
     </div>
     <p style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:16px">
-      鏁版嵁鍙瓨鍦ㄨ繖鍙拌澶囩殑娴忚鍣ㄩ噷锛屼笉涓婁紶銆傛崲鎵嬫満鎴栨竻缂撳瓨鍓嶅厛瀵煎嚭澶囦唤銆?    </p>
+      数据只存在这台设备的浏览器里，不上传。换手机或清缓存前先导出备份。
+    </p>
   </div>
 </div>
 
@@ -224,18 +226,19 @@ main{padding:14px 16px 0}
 
   const KEY = 'parcel.v1';
   const PLATFORM_NAME = {
-    taobao:'娣樺疂', jd:'浜笢', pdd:'鎷煎澶?, douyin:'鎶栭煶', taobaoflash:'娣樺疂闂€?,
-    meituan:'缇庡洟', jdwaimai:'浜笢澶栧崠', books:'鍗氬鏉?, other:'鍏朵粬'
+    taobao:'淘宝', jd:'京东', pdd:'拼多多', douyin:'抖音', taobaoflash:'淘宝闪送',
+    meituan:'美团', jdwaimai:'京东外卖', books:'博客来', other:'其他'
   };
   const STATUS_NAME = {
-    pending:'寰呭彂璐?, in_transit:'杩愯緭涓?, pickup:'寰呭彇浠?, delivering:'娲鹃€佷腑',
-    delivered:'宸茬鏀?, exception:'寮傚父', notfound:'鏆傛棤杞ㄨ抗'
+    pending:'待发货', in_transit:'运输中', pickup:'待取件', delivering:'派送中',
+    delivered:'已签收', exception:'异常', notfound:'暂无轨迹'
   };
 
   const $ = (id) => document.getElementById(id);
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-  // 杞ㄨ抗鏂囨湰閲屽伓灏斾細甯﹀彇浠剁爜锛堥┛绔?蹇€掓煖锛夛紝椤烘墜鎹″嚭鏉?  const PICKUP_RE = /(?:鍙栦欢[鐮佺⒓]|鎻愯揣[鐮佺⒓]|鎻愯波[鐮佺⒓]|鍙栬揣[鐮佺⒓]|棰嗗彇[鐮佺⒓])[^0-9]{0,6}([0-9][0-9\-]{2,12})/;
+  // 轨迹文本里偶尔会带取件码（驿站/快递柜），顺手捡出来
+  const PICKUP_RE = /(?:取件[码碼]|提货[码碼]|提貨[码碼]|取货[码碼]|领取[码碼])[^0-9]{0,6}([0-9][0-9\-]{2,12})/;
   function detectPickup(text) {
     if (!text) return '';
     const m = String(text).match(PICKUP_RE);
@@ -243,10 +246,10 @@ main{padding:14px 16px 0}
     return m[1].replace(/[^0-9\-]/g, '');
   }
 
-  /* ---------- 瀛樺偍 ---------- */
+  /* ---------- 存储 ---------- */
   const defaults = {
     items: [],
-    groups: ['鎴戠殑', '瀹朵汉鐨?],
+    groups: ['我的', '家人的'],
     settings: { base: location.origin, token: '' },
   };
   let db = load();
@@ -267,7 +270,7 @@ main{padding:14px 16px 0}
   }
   function save() { localStorage.setItem(KEY, JSON.stringify(db)); }
 
-  /* ---------- 宸ュ叿 ---------- */
+  /* ---------- 工具 ---------- */
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let toastTimer;
   function toast(msg) {
@@ -287,18 +290,18 @@ main{padding:14px 16px 0}
   function relTime(s) {
     if (!s) return '';
     const diff = (Date.now() - new Date(s).getTime()) / 1000;
-    if (diff < 60) return '鍒氬垰';
-    if (diff < 3600) return `${Math.floor(diff/60)} 鍒嗛挓鍓峘;
-    if (diff < 86400) return `${Math.floor(diff/3600)} 灏忔椂鍓峘;
-    return `${Math.floor(diff/86400)} 澶╁墠`;
+    if (diff < 60) return '刚刚';
+    if (diff < 3600) return `${Math.floor(diff/60)} 分钟前`;
+    if (diff < 86400) return `${Math.floor(diff/3600)} 小时前`;
+    return `${Math.floor(diff/86400)} 天前`;
   }
 
-  /* ---------- 绛涢€?---------- */
+  /* ---------- 筛选 ---------- */
   let filter = { type: 'all' };
 
   function refreshFilters() {
     const types = [
-      ['all', '鍏ㄩ儴'], ['active', '鍦ㄩ€?], ['pickup', '寰呭彇浠?], ['delivered', '宸茬鏀?],
+      ['all', '全部'], ['active', '在途'], ['pickup', '待取件'], ['delivered', '已签收'],
     ];
     let html = types.map(([k, n]) => `<button class="chip ${filter.type===k?'on':''}" data-f="${k}">${n}</button>`).join('');
     for (const g of db.groups) {
@@ -314,7 +317,7 @@ main{padding:14px 16px 0}
     };
   }
 
-  /* ---------- 鍒楄〃 ---------- */
+  /* ---------- 列表 ---------- */
   function visibleItems() {
     let list = db.items.filter((i) => !i.archived);
     if (filter.type === 'active') list = list.filter((i) => !['delivered','exception'].includes(i.status));
@@ -331,17 +334,17 @@ main{padding:14px 16px 0}
 
   function render() {
     const list = visibleItems();
-    $('cnt').textContent = list.length ? `${list.length} 浠禶 : '';
+    $('cnt').textContent = list.length ? `${list.length} 件` : '';
     const pending = (db.pendingCodes || []).map((p) => `
       <div class="card" style="border-color:#4a3a12;background:#1e1a10">
         <div class="top">
-          <span class="pf">鍙栦欢鐮?/span>
-          <div class="title"><b>${esc(p.code)}</b><div class="no">鏉ヨ嚜 ${esc(p.source || '鏈煡')} 路 杩樻病褰掑埌鍝釜鍖呰９</div></div>
+          <span class="pf">取件码</span>
+          <div class="title"><b>${esc(p.code)}</b><div class="no">来自 ${esc(p.source || '未知')} · 还没归到哪个包裹</div></div>
         </div>
-        <div class="acts"><button data-apply="${esc(p.code)}">搴旂敤鍒板寘瑁?/button></div>
+        <div class="acts"><button data-apply="${esc(p.code)}">应用到包裹</button></div>
       </div>`).join('');
     if (!list.length && !pending) {
-      $('list').innerHTML = `<div class="empty"><b>馃摝</b>杩樻病鏈夊寘瑁?br><span style="color:var(--dim2);font-size:13px">鐐逛笅闈㈢殑鎸夐挳锛岀矘涓€涓崟鍙疯繘鏉?/span></div>`;
+      $('list').innerHTML = `<div class="empty"><b>📦</b>还没有包裹<br><span style="color:var(--dim2);font-size:13px">点下面的按钮，粘一个单号进来</span></div>`;
       return;
     }
     $('list').innerHTML = pending + list.map(cardHtml).join('');
@@ -352,25 +355,25 @@ main{padding:14px 16px 0}
     const cls = st === 'delivered' ? 'done' : '';
     const pickup = it.pickup ? `
       <div class="pickup" data-copy="${esc(it.pickup)}">
-        <span>鍙栦欢鐮?/span><b>${esc(it.pickup)}</b>
+        <span>取件码</span><b>${esc(it.pickup)}</b>
       </div>` : '';
     const when = it.latestTime ? fmtTime(it.latestTime) : (it.updatedAt ? fmtTime(it.updatedAt) : '');
     return `
       <div class="card ${cls}" data-id="${it.id}">
         <div class="top">
-          <span class="pf">${esc(PLATFORM_NAME[it.platform] || '鍏朵粬')}</span>
+          <span class="pf">${esc(PLATFORM_NAME[it.platform] || '其他')}</span>
           <div class="title">
-            <b>${esc(it.name || it.no || '鏈懡鍚?)}</b>
+            <b>${esc(it.name || it.no || '未命名')}</b>
             ${it.no ? `<div class="no">${esc(it.no)}</div>` : ''}
           </div>
           <span class="status ${st}">${esc(STATUS_NAME[st] || st)}</span>
         </div>
         ${it.latest ? `<div class="latest">${esc(it.latest)}</div>` : ''}
-        ${when ? `<div class="meta">${esc(when)}${it.carrier ? ' 路 ' + esc(it.carrier) : ''}</div>` : ''}
+        ${when ? `<div class="meta">${esc(when)}${it.carrier ? ' · ' + esc(it.carrier) : ''}</div>` : ''}
         ${pickup}
         <div class="acts">
-          <button data-act="refresh">鍒锋柊杞ㄨ抗</button>
-          <button data-act="edit">缂栬緫</button>
+          <button data-act="refresh">刷新轨迹</button>
+          <button data-act="edit">编辑</button>
         </div>
       </div>`;
   }
@@ -380,16 +383,16 @@ main{padding:14px 16px 0}
     if (applyBtn) {
       const code = applyBtn.dataset.apply;
       const target = db.items.filter((i) => !i.archived && i.status !== 'delivered' && !i.pickup)[0];
-      if (!target) { toast('鍏堟坊鍔犱竴涓湪閫斿寘瑁?); return; }
+      if (!target) { toast('先添加一个在途包裹'); return; }
       target.pickup = code;
       db.pendingCodes = (db.pendingCodes || []).filter((p) => p.code !== code);
       save(); render();
-      toast(`宸插簲鐢ㄥ埌銆?{target.name || target.no || '鍖呰９'}銆峘);
+      toast(`已应用到「${target.name || target.no || '包裹'}」`);
       return;
     }
     const copyEl = e.target.closest('[data-copy]');
     if (copyEl) {
-      try { await navigator.clipboard.writeText(copyEl.dataset.copy); toast('鍙栦欢鐮佸凡澶嶅埗'); }
+      try { await navigator.clipboard.writeText(copyEl.dataset.copy); toast('取件码已复制'); }
       catch { toast(copyEl.dataset.copy); }
       return;
     }
@@ -407,7 +410,7 @@ main{padding:14px 16px 0}
     openDetail(it);
   });
 
-  /* ---------- 鏌ヨ ---------- */
+  /* ---------- 查询 ---------- */
   async function queryTrack(no) {
     const base = (db.settings.base || location.origin).replace(/\/$/, '');
     const url = new URL('/api/track', base);
@@ -420,8 +423,8 @@ main{padding:14px 16px 0}
   }
 
   async function refreshOne(it, btn) {
-    if (!it.no) return toast('杩欏崟娌℃湁鍗曞彿');
-    if (btn) { btn.disabled = true; btn.textContent = '鏌ヨ涓€?; }
+    if (!it.no) return toast('这单没有单号');
+    if (btn) { btn.disabled = true; btn.textContent = '查询中…'; }
     try {
       const j = await queryTrack(it.no);
       Object.assign(it, {
@@ -434,18 +437,18 @@ main{padding:14px 16px 0}
         if (code) it.pickup = code;
       }
       save(); render();
-      toast(j.status === 'notfound' ? '杩樻病杞ㄨ抗锛屾櫄鐐瑰啀鍒? : '宸叉洿鏂?);
+      toast(j.status === 'notfound' ? '还没轨迹，晚点再刷' : '已更新');
     } catch (err) {
-      toast('鏌ヨ澶辫触锛? + err.message);
+      toast('查询失败：' + err.message);
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '鍒锋柊杞ㄨ抗'; }
+      if (btn) { btn.disabled = false; btn.textContent = '刷新轨迹'; }
     }
   }
 
   $('refreshAll').onclick = async () => {
     const list = db.items.filter((i) => i.no && i.status !== 'delivered');
-    if (!list.length) return toast('娌℃湁瑕佸埛鏂扮殑');
-    toast(`鍒锋柊 ${list.length} 浠垛€);
+    if (!list.length) return toast('没有要刷新的');
+    toast(`刷新 ${list.length} 件…`);
     for (const it of list) {
       try {
         const j = await queryTrack(it.no);
@@ -458,13 +461,13 @@ main{padding:14px 16px 0}
           const code = detectPickup(j.latest) || detectPickup((j.events || []).map((e) => e.text).join(' '));
           if (code) it.pickup = code;
         }
-      } catch { /* 鍗曟潯澶辫触涓嶅奖鍝嶅叾浠?*/ }
+      } catch { /* 单条失败不影响其他 */ }
     }
     save(); render();
-    toast('鍒锋柊瀹屾垚');
+    toast('刷新完成');
   };
 
-  /* ---------- 寮瑰眰 ---------- */
+  /* ---------- 弹层 ---------- */
   function openSheet(id) { $(id).classList.add('on'); }
   function closeSheets() { document.querySelectorAll('.sheet').forEach((s) => s.classList.remove('on')); }
   document.addEventListener('click', (e) => {
@@ -472,16 +475,16 @@ main{padding:14px 16px 0}
     if (e.target.classList.contains('sheet')) closeSheets();
   });
 
-  /* ---------- 娣诲姞 / 缂栬緫 ---------- */
+  /* ---------- 添加 / 编辑 ---------- */
   let editing = null;
 
   function fillGroupSelect(sel) {
-    sel.innerHTML = '<option value="">鏈垎缁?/option>' + db.groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    sel.innerHTML = '<option value="">未分组</option>' + db.groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
   }
 
   function openEdit(it) {
     editing = it || null;
-    $('editTitle').textContent = it ? '缂栬緫鍖呰９' : '娣诲姞鍖呰９';
+    $('editTitle').textContent = it ? '编辑包裹' : '添加包裹';
     $('f_name').value = it?.name || '';
     $('f_no').value = it?.no || '';
     $('f_platform').value = it?.platform || 'taobao';
@@ -499,7 +502,7 @@ main{padding:14px 16px 0}
   $('saveItem').onclick = () => {
     const name = $('f_name').value.trim();
     const no = $('f_no').value.trim().toUpperCase().replace(/\s+/g, '');
-    if (!name && !no) return toast('鑷冲皯濉釜鍚嶅瓧鎴栧崟鍙?);
+    if (!name && !no) return toast('至少填个名字或单号');
     const data = {
       name, no,
       platform: $('f_platform').value,
@@ -524,14 +527,14 @@ main{padding:14px 16px 0}
 
   $('delItem').onclick = () => {
     if (!editing) return;
-    if (!confirm('鍒犳帀杩欎釜鍖呰９锛?)) return;
+    if (!confirm('删掉这个包裹？')) return;
     db.items = db.items.filter((i) => i.id !== editing.id);
-    save(); closeSheets(); render(); toast('宸插垹闄?);
+    save(); closeSheets(); render(); toast('已删除');
   };
 
-  /* ---------- 璇︽儏 ---------- */
+  /* ---------- 详情 ---------- */
   function openDetail(it) {
-    $('d_title').textContent = it.name || it.no || '杞ㄨ抗';
+    $('d_title').textContent = it.name || it.no || '轨迹';
     const events = (it.events || []).map((e) => `
       <div class="ev">
         <div class="t">${esc(fmtTime(e.time) || e.time || '')}</div>
@@ -539,17 +542,17 @@ main{padding:14px 16px 0}
         ${e.where ? `<div class="w">${esc(e.where)}</div>` : ''}
       </div>`).join('');
     $('d_body').innerHTML = `
-      ${it.pickup ? `<div class="pickup" style="margin:0 0 14px"><span>鍙栦欢鐮?/span><b>${esc(it.pickup)}</b></div>` : ''}
+      ${it.pickup ? `<div class="pickup" style="margin:0 0 14px"><span>取件码</span><b>${esc(it.pickup)}</b></div>` : ''}
       <div class="meta" style="margin:0 0 12px">
-        ${esc(it.no || '鏃犲崟鍙?)}${it.carrier ? ' 路 ' + esc(it.carrier) : ''}
-        ${it.updatedAt ? ' 路 ' + relTime(it.updatedAt) + '鏇存柊' : ''}
+        ${esc(it.no || '无单号')}${it.carrier ? ' · ' + esc(it.carrier) : ''}
+        ${it.updatedAt ? ' · ' + relTime(it.updatedAt) + '更新' : ''}
       </div>
       ${it.note ? `<div style="font-size:14px;color:#c3cad6;margin-bottom:12px">${esc(it.note)}</div>` : ''}
-      <div class="tl">${events || '<div style="color:var(--dim2);font-size:14px">杩樻病鏈夎建杩癸紝鐐瑰崱鐗囦笂鐨勩€屽埛鏂拌建杩广€嶈瘯璇?/div>'}</div>`;
+      <div class="tl">${events || '<div style="color:var(--dim2);font-size:14px">还没有轨迹，点卡片上的「刷新轨迹」试试</div>'}</div>`;
     openSheet('detailSheet');
   }
 
-  /* ---------- 璁剧疆 ---------- */
+  /* ---------- 设置 ---------- */
   $('openSettings').onclick = () => {
     $('s_base').value = db.settings.base || location.origin;
     $('s_token').value = db.settings.token || '';
@@ -560,12 +563,12 @@ main{padding:14px 16px 0}
   $('saveSettings').onclick = () => {
     db.settings.base = $('s_base').value.trim() || location.origin;
     db.settings.token = $('s_token').value.trim();
-    save(); toast('璁剧疆宸蹭繚瀛?);
+    save(); toast('设置已保存');
   };
 
   $('saveGroups').onclick = () => {
     db.groups = $('s_groups').value.split('\n').map((s) => s.trim()).filter(Boolean);
-    save(); refreshFilters(); render(); toast('鍒嗙粍宸蹭繚瀛?);
+    save(); refreshFilters(); render(); toast('分组已保存');
   };
 
   $('exportData').onclick = () => {
@@ -574,7 +577,7 @@ main{padding:14px 16px 0}
     a.href = URL.createObjectURL(blob);
     a.download = `parcel-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
-    toast('宸插鍑?);
+    toast('已导出');
   };
 
   $('importData').onclick = () => $('fileInput').click();
@@ -583,49 +586,52 @@ main{padding:14px 16px 0}
     if (!f) return;
     try {
       const data = JSON.parse(await f.text());
-      if (!Array.isArray(data.items)) throw new Error('鏍煎紡涓嶅');
+      if (!Array.isArray(data.items)) throw new Error('格式不对');
       db = { items: data.items, groups: data.groups || db.groups, settings: { ...db.settings, ...(data.settings || {}) } };
-      save(); refreshFilters(); render(); closeSheets(); toast('宸插鍏?);
+      save(); refreshFilters(); render(); closeSheets(); toast('已导入');
     } catch (err) {
-      toast('瀵煎叆澶辫触锛? + err.message);
+      toast('导入失败：' + err.message);
     }
     e.target.value = '';
   };
 
-  /* ---------- 鍚姩 ---------- */
+  /* ---------- 启动 ---------- */
   refreshFilters();
   render();
   if (!db.settings.token) {
-    setTimeout(() => toast('鍏堝幓鍙充笂瑙?鈿?濉?APP_TOKEN'), 800);
+    setTimeout(() => toast('先去右上角 ⚙ 填 APP_TOKEN'), 800);
   }
 
-  /* ---------- 鍘熺敓娉ㄥ叆鐨勫彇浠剁爜 ---------- */
+  /* ---------- 原生注入的取件码 ---------- */
   window.__onPickupCode = function (code, tracking, source) {
     code = String(code || '').trim();
     if (!code) return;
     const norm = (s) => String(s || '').toUpperCase().replace(/\s+/g, '');
     db.pendingCodes = db.pendingCodes || [];
 
-    // 1. 鍏堟寜鐭俊閲屽甫鐨勫崟鍙风簿纭尮閰?    let target = tracking ? db.items.find((i) => !i.archived && norm(i.no) === norm(tracking)) : null;
-    // 2. 娌″尮閰嶅埌锛岄€€鑰屾眰鍏舵锛氭渶鏂颁竴浠惰繕娌″～鐮佺殑鍦ㄩ€斿寘瑁?    if (!target) {
+    // 1. 先按短信里带的单号精确匹配
+    let target = tracking ? db.items.find((i) => !i.archived && norm(i.no) === norm(tracking)) : null;
+    // 2. 没匹配到，退而求其次：最新一件还没填码的在途包裹
+    if (!target) {
       target = db.items.filter((i) => !i.archived && i.status !== 'delivered' && !i.pickup)[0];
     }
 
     if (target) {
-      if (target.pickup === code) return; // 宸茬粡濉繃浜?      target.pickup = code;
+      if (target.pickup === code) return; // 已经填过了
+      target.pickup = code;
       target.pickupSource = source || '';
       target.status = 'pickup';
-      target.statusText = '寰呭彇浠?;
+      target.statusText = '待取件';
       save(); render();
-      toast(`鍙栦欢鐮?${code} 宸插～鍏ャ€?{target.name || target.no || '鍖呰９'}銆峘);
+      toast(`取件码 ${code} 已填入「${target.name || target.no || '包裹'}」`);
     } else {
       db.pendingCodes.unshift({ code, tracking: tracking || '', source: source || '', at: new Date().toISOString() });
       save(); render();
-      toast(`鏀跺埌鍙栦欢鐮?${code}锛岀偣椤堕儴鍗＄墖搴旂敤`);
+      toast(`收到取件码 ${code}，点顶部卡片应用`);
     }
   };
 
-  /* ---------- App 鍐呮墠鏄剧ず鐨勫姛鑳?---------- */
+  /* ---------- App 内才显示的功能 ---------- */
   if (window.Native) {
     $('appBox').style.display = 'block';
     $('notifBtn').onclick = () => window.Native.openNotificationSettings();
@@ -633,9 +639,9 @@ main{padding:14px 16px 0}
     try {
       const on = window.Native.notificationAccessEnabled();
       $('notifState').textContent = on
-        ? '閫氱煡璇诲彇锛氬凡寮€鍚€備赴宸€佽彍楦熴€佹窐瀹濈瓑鎺ㄩ€侀噷鐨勫彇浠剁爜浼氳嚜鍔ㄥ～杩涙潵銆?
-        : '閫氱煡璇诲彇锛氭湭寮€鍚€傜偣涓婇潰鐨勬寜閽紝鍦ㄥ垪琛ㄩ噷鎵惧埌銆屽寘瑁广€嶆墦寮€寮€鍏炽€?;
-    } catch { /* 鑰佺増鏈?App 娌℃湁杩欎釜鏂规硶 */ }
+        ? '通知读取：已开启。丰巢、菜鸟、淘宝等推送里的取件码会自动填进来。'
+        : '通知读取：未开启。点上面的按钮，在列表里找到「包裹」打开开关。';
+    } catch { /* 老版本 App 没有这个方法 */ }
   }
 })();
 </script>
