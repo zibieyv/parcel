@@ -201,7 +201,7 @@ main{padding:14px 16px 0}
     <div class="row2">
       <div class="field"><label>平台</label>
         <select id="f_platform">
-          <option value="other" selected>默认</option>
+          <option value="other" selected>默认其他</option>
           <option value="taobao">淘宝</option><option value="jd">京东</option>
           <option value="pdd">拼多多</option><option value="douyin">抖音商城</option>
           <option value="taobaoflash">淘宝闪送</option><option value="meituan">美团外卖</option>
@@ -674,7 +674,7 @@ main{padding:14px 16px 0}
     $('editTitle').textContent = it ? '编辑包裹' : '添加包裹';
     $('f_name').value = it?.name || '';
     $('f_no').value = it?.no || '';
-    $('f_platform').value = it?.platform || 'taobao';
+    $('f_platform').value = (it && it.platform) ? it.platform : 'other';
     fillGroupSelect($('f_group'));
     $('f_group').value = it?.group || '';
     $('f_pickup').value = it?.pickup || '';
