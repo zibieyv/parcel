@@ -10,8 +10,8 @@ android {
         applicationId 'com.zibieyv.parcel'
         minSdk 26
         targetSdk 34
-        versionCode 20
-        versionName '0.20'
+        versionCode 21
+        versionName '0.21'
     }
 
     buildFeatures {
@@ -46,4 +46,9 @@ android {
     lint {
         abortOnError false
     }
+}
+
+dependencies {
+    // 离线中文 OCR：截屏识图用，不联网、不用 Google 服务
+    implementation 'com.google.mlkit:text-recognition-chinese:16.0.0'
 }

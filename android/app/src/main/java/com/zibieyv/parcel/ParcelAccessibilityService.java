@@ -95,26 +95,10 @@ public class ParcelAccessibilityService extends AccessibilityService {
         super.onServiceConnected();
         try {
             wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-            if (BallPrefs.isEnabled(this)) buildRoot();
-            ui.postDelayed(collapseTask, 8000);
-
-            ballReceiver = new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context context, Intent intent) {
-                    applyBallVisibility();
-                }
-            };
-            IntentFilter f = new IntentFilter(BallPrefs.ACTION_CHANGED);
-            if (Build.VERSION.SDK_INT >= 33) {
-                registerReceiver(ballReceiver, f, Context.RECEIVER_NOT_EXPORTED);
-            } else {
-                registerReceiver(ballReceiver, f);
-            }
-
+            // 悬浮球已经交给 ScreenService（截屏 OCR 那条线），这里只保留读屏能力
             RUNNING = true;
         } catch (Throwable t) {
             RUNNING = false;
-            toast("悬浮窗启动失败：" + t.getMessage());
         }
     }
 

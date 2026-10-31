@@ -1,6 +1,6 @@
 {
-  "versionCode": 20,
-  "versionName": "0.20",
-  "url": "/apk/parcel-0.20.apk",
-  "notes": "悬浮球开关挪到首页，通知栏只留状态"
+  "versionCode": 21,
+  "versionName": "0.21",
+  "url": "/apk/parcel-0.21.apk",
+  "notes": "截屏 OCR 抓单号，不再依赖无障碍"
 }

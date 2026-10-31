@@ -59,16 +59,54 @@ public class MainActivity extends Activity implements Bridge.Sink {
 
         askSmsPermission();
         askNotifPermission();
-        startKeepAlive();
+        ensureOverlay();
     }
 
-    private void startKeepAlive() {
+    /* ---------------- 悬浮窗权限 + 截屏授权 ---------------- */
+
+    private static final int REQ_PROJECTION = 2001;
+    private static final int REQ_OVERLAY = 2002;
+
+    private void ensureOverlay() {
+        if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
+            try {
+                Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                startActivityForResult(i, REQ_OVERLAY);
+                return;
+            } catch (Exception ignored) {}
+        }
+        requestProjection();
+    }
+
+    private void requestProjection() {
         try {
-            Intent i = new Intent(this, KeepAliveService.class);
-            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
-            else startService(i);
+            android.media.projection.MediaProjectionManager mgr =
+                    (android.media.projection.MediaProjectionManager)
+                            getSystemService(MEDIA_PROJECTION_SERVICE);
+            startActivityForResult(mgr.createScreenCaptureIntent(), REQ_PROJECTION);
         } catch (Exception e) {
-            toast("常驻服务启动失败：" + e.getMessage());
+            toast("发起截屏授权失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_OVERLAY) {
+            ensureOverlay();
+            return;
+        }
+        if (requestCode == REQ_PROJECTION) {
+            if (resultCode == RESULT_OK && data != null) {
+                Intent svc = new Intent(this, ScreenService.class);
+                svc.putExtra("code", resultCode);
+                svc.putExtra("data", data);
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(svc);
+                else startService(svc);
+            } else {
+                toast("没授权截屏：悬浮球仍在，但只能靠读屏抓单号");
+            }
         }
     }
 
@@ -296,6 +334,12 @@ public class MainActivity extends Activity implements Bridge.Sink {
         public void setBallEnabled(boolean on) {
             BallPrefs.setEnabled(MainActivity.this, on);
             sendBroadcast(new Intent(BallPrefs.ACTION_CHANGED).setPackage(getPackageName()));
+        }
+
+        /** 网页里想重新申请一次截屏授权 */
+        @JavascriptInterface
+        public void requestCapture() {
+            runOnUiThread(MainActivity.this::ensureOverlay);
         }
 
         /** 打开无障碍设置页，让用户给「包裹」开读屏 */
