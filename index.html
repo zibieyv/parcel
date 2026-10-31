@@ -160,6 +160,7 @@ main{padding:14px 16px 0}
   <div class="hrow">
     <h1>包裹<span class="hcount" id="cnt"></span></h1>
     <div style="display:flex;gap:8px">
+      <button class="icon-btn" id="ballBtn" title="悬浮球" style="display:none">◉</button>
       <button class="icon-btn" id="refreshAll" title="全部刷新">↻</button>
       <button class="icon-btn" id="openSettings" title="设置">⚙</button>
     </div>
@@ -997,6 +998,32 @@ main{padding:14px 16px 0}
     $('accFix').onclick = () => window.Native.openAccessibilitySettings();
   }
 
+  /* ---------- 悬浮球开关（首页按钮 + 设置开关，两处同步） ---------- */
+  function syncBallUI() {
+    if (!window.Native || !window.Native.ballEnabled) return;
+    let on = true;
+    try { on = window.Native.ballEnabled(); } catch (e) { return; }
+    const btn = $('ballBtn');
+    if (!btn) return;
+    btn.style.display = 'grid';
+    btn.textContent = on ? '◉' : '◎';
+    btn.style.color = on ? '#9db8ff' : '#5f6875';
+    btn.title = on ? '悬浮球显示中，点此隐藏' : '悬浮球已隐藏，点此显示';
+    const sw = $('ballToggle');
+    if (sw) sw.checked = on;
+  }
+
+  function toggleBall() {
+    if (!window.Native || !window.Native.setBallEnabled) return;
+    let on = true;
+    try { on = window.Native.ballEnabled(); } catch (e) { return; }
+    try {
+      window.Native.setBallEnabled(!on);
+      syncBallUI();
+      toast(!on ? '悬浮球已显示' : '悬浮球已隐藏');
+    } catch (e) { toast('切换失败'); }
+  }
+
   /* ---------- 下拉刷新（网页/WebView 通用，不用杀后台） ---------- */
   (function setupPull() {
     const hint = $('pullHint');
@@ -1123,12 +1150,15 @@ main{padding:14px 16px 0}
     $('smsBtn').onclick = () => window.Native.openAppSettings();
     $('checkUpdateBtn').onclick = () => checkUpdate(false);
     $('accBtn').onclick = () => window.Native.openAccessibilitySettings();
+    $('ballBtn').onclick = () => toggleBall();
+    syncBallUI();
     try {
       const bt = $('ballToggle');
       if (window.Native.ballEnabled) bt.checked = window.Native.ballEnabled();
       bt.onchange = () => {
         try {
           window.Native.setBallEnabled(bt.checked);
+          syncBallUI();
           toast(bt.checked ? '悬浮球已显示' : '悬浮球已隐藏');
         } catch (e) { toast('切换失败'); }
       };
