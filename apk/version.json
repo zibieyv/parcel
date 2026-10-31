@@ -1,6 +1,6 @@
 {
-  "versionCode": 23,
-  "versionName": "0.23",
-  "url": "/apk/parcel-0.23.apk?v=23",
-  "notes": "UI 整理：卡片、筛选、权限面板"
+  "versionCode": 24,
+  "versionName": "0.24",
+  "url": "/apk/parcel-0.24.apk?v=24",
+  "notes": "截屏默认整屏，去掉无障碍提醒"
 }

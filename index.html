@@ -274,9 +274,9 @@ main{padding:14px 16px 0}
       <p id="accState" style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:10px"></p>
     </div>
 
-    <a href="/apk/parcel-0.23.apk?v=23" download
+    <a href="/apk/parcel-0.24.apk?v=24" download
        style="display:block;text-align:center;margin-top:22px;padding:12px;border-radius:12px;background:var(--card2);border:1px solid var(--line);font-size:14px;color:#c8d0dc;text-decoration:none">
-      下载安卓 App（v0.23，截屏抓单号）
+      下载安卓 App（v0.24，截屏抓单号）
     </a>
 
     <div style="margin-top:22px;display:flex;gap:10px">
@@ -1233,30 +1233,10 @@ main{padding:14px 16px 0}
     toast('抓到单号 ' + no + '，确认后保存');
   };
 
-  /* ---------- 读屏权限/服务掉了要提醒 ---------- */
+  /* ---------- 读屏提示：现在抓单号走截屏 OCR，不再需要无障碍 ---------- */
   function checkAccBar() {
-    if (!window.Native || !window.Native.accessibilityEnabled) return;
-    let on = true, running = true;
-    try {
-      on = window.Native.accessibilityEnabled();
-      if (window.Native.accessibilityRunning) running = window.Native.accessibilityRunning();
-    } catch (e) { return; }
-
     const bar = $('accBar');
-    if (on && running) {
-      if (bar.innerHTML) { bar.innerHTML = ''; bar.style.display = 'none'; }
-      return;
-    }
-
-    // 状态没变就不重绘，避免每 4 秒闪一下
-    const state = on ? 'dead' : 'off';
-    if (bar.dataset.state === state) return;
-    bar.dataset.state = state;
-    bar.innerHTML = on
-      ? '<span>无障碍权限还在，但服务被系统杀了（悬浮球消失）</span><button id="accFix">去重启</button>'
-      : '<span>读屏权限被系统关掉了，悬浮球已经失效</span><button id="accFix">去开启</button>';
-    bar.style.display = 'flex';
-    $('accFix').onclick = () => window.Native.openAccessibilitySettings();
+    if (bar && bar.innerHTML) { bar.innerHTML = ''; bar.style.display = 'none'; }
   }
 
   /* ---------- 悬浮球开关（首页按钮） ---------- */
@@ -1465,10 +1445,7 @@ main{padding:14px 16px 0}
     $('ballBtn').onclick = () => toggleBall();
     syncBallUI();
     try {
-      const acc = window.Native.accessibilityEnabled();
-      $('accState').textContent = acc
-        ? '读屏已开启，抓单号会优先用它（更快更准）。'
-        : '读屏未开启，抓单号会走截屏 OCR。';
+      $('accState').textContent = '抓单号现在走截屏 OCR，不再需要无障碍；之前开过的可以去系统设置里关掉。';
     } catch { /* 老版本没有 */ }
   }
 
@@ -1494,7 +1471,6 @@ main{padding:14px 16px 0}
 
     rows.push(permRow('通知读取', '丰巢/菜鸟/淘宝推送里的取件码', notif, '去开启'));
     rows.push(permRow('短信', '驿站、快递公司的取件短信', sms, '去开启'));
-    rows.push(permRow('读屏（可选）', acc ? (running ? '已开启且正在运行' : '权限在，但服务被系统杀了') : '未开启，抓单号会走截屏 OCR', acc && running, acc ? '去查看' : '去开启'));
     rows.push(permRow('截屏 OCR', '点球截图后本地识别单号', false, '重新授权'));
 
     const box = $('permList');
@@ -1506,7 +1482,6 @@ main{padding:14px 16px 0}
         try {
           if (name === '通知读取') window.Native.openNotificationSettings();
           else if (name === '短信') window.Native.openAppSettings();
-          else if (name === '读屏（可选）') window.Native.openAccessibilitySettings();
           else if (name === '截屏 OCR') {
             if (window.Native.requestCapture) window.Native.requestCapture();
             else toast('先更新 App');

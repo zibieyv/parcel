@@ -84,7 +84,15 @@ public class MainActivity extends Activity implements Bridge.Sink {
             android.media.projection.MediaProjectionManager mgr =
                     (android.media.projection.MediaProjectionManager)
                             getSystemService(MEDIA_PROJECTION_SERVICE);
-            startActivityForResult(mgr.createScreenCaptureIntent(), REQ_PROJECTION);
+
+            // Android 14 起可以指定「整个屏幕」，省掉那个"单个应用/整个屏幕"的下拉
+            if (Build.VERSION.SDK_INT >= 34) {
+                android.media.projection.MediaProjectionConfig cfg =
+                        android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay();
+                startActivityForResult(mgr.createScreenCaptureIntent(cfg), REQ_PROJECTION);
+            } else {
+                startActivityForResult(mgr.createScreenCaptureIntent(), REQ_PROJECTION);
+            }
         } catch (Exception e) {
             toast("发起截屏授权失败：" + e.getMessage());
         }
