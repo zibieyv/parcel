@@ -76,6 +76,9 @@ h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.5px}
 }
 .chip.on{background:#1b2740;border-color:#2f4d85;color:#a8c4ff}
 .chip em{font-style:normal;font-size:11px;opacity:.75;margin-left:4px}
+.chip-picker{display:flex;flex-wrap:wrap;gap:8px}
+.chip-picker .chip{background:#0d1016;border:1px solid var(--line);color:var(--dim)}
+.chip-picker .chip.on{background:#1b2740;border-color:#2f4d85;color:#a8c4ff}
 
 /* 列表 */
 main{padding:14px 16px 0}
@@ -209,11 +212,9 @@ main{padding:14px 16px 0}
           <option value="jdwaimai">京东外卖</option><option value="books">博客来</option>
         </select>
       </div>
-      <div class="field"><label>分组</label>
-        <div style="display:flex;gap:8px">
-          <select id="f_group" style="flex:1"></select>
-          <button class="ghost" id="newGroupBtn" style="width:auto;margin:0;padding:0 14px;flex:0 0 auto">＋</button>
-        </div>
+      <div class="field"><label>分组（可多选）</label>
+        <div id="f_groups" class="chip-picker"></div>
+        <button class="ghost" id="newGroupBtn" style="margin-top:8px">＋ 新建分组</button>
       </div>
     </div>
     <div class="field"><label>取件码（大多留空，到站会自动填）</label><input id="f_pickup" placeholder="6-4-12003"></div>
@@ -359,12 +360,27 @@ main{padding:14px 16px 0}
   };
   let db = load();
 
+  /** 旧数据只有 group，新数据用 groups 数组，读进来统一 */
+  function normalizeItem(it) {
+    if (!it || typeof it !== 'object') return it;
+    let gs = Array.isArray(it.groups) ? it.groups.slice() : null;
+    if (!gs) gs = it.group ? [it.group] : [];
+    return { ...it, groups: gs, group: gs[0] || '' };
+  }
+
+  /** 这个包裹是否属于某个分组（'none' = 未分组） */
+  function itemInGroup(it, key) {
+    const gs = Array.isArray(it.groups) ? it.groups : (it.group ? [it.group] : []);
+    if (key === 'none') return gs.length === 0;
+    return gs.includes(key);
+  }
+
   function load() {
     try {
       const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (!raw) return { ...defaults, groups: [...defaults.groups], deleted: {} };
       return {
-        items: Array.isArray(raw.items) ? raw.items : [],
+        items: (Array.isArray(raw.items) ? raw.items : []).map(normalizeItem),
         groups: Array.isArray(raw.groups) ? raw.groups : [...defaults.groups],
         pendingCodes: Array.isArray(raw.pendingCodes) ? raw.pendingCodes : [],
         deleted: raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {},
@@ -412,7 +428,7 @@ main{padding:14px 16px 0}
   /** 当前分组范围内的包裹（groups 为空 = 全部） */
   function groupScope() {
     if (!filter.groups.length) return db.items;
-    return db.items.filter((i) => filter.groups.includes(i.group || 'none'));
+    return db.items.filter((i) => filter.groups.some((k) => itemInGroup(i, k)));
   }
 
   function statusMatched(i, status) {
@@ -700,9 +716,23 @@ main{padding:14px 16px 0}
 
   /* ---------- 添加 / 编辑 ---------- */
   let editing = null;
+  let editGroups = [];
 
-  function fillGroupSelect(sel) {
-    sel.innerHTML = '<option value="">未分组</option>' + db.groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+  function fillGroupPicker() {
+    const box = $('f_groups');
+    if (!box) return;
+    box.innerHTML = db.groups.length
+      ? db.groups.map((g) => `<button class="chip ${editGroups.includes(g)?'on':''}" data-eg="${esc(g)}">${esc(g)}</button>`).join('')
+      : '<span style="font-size:12px;color:var(--dim2)">还没有分组，点下面新建</span>';
+    box.querySelectorAll('[data-eg]').forEach((b) => {
+      b.onclick = () => {
+        const g = b.dataset.eg;
+        const i = editGroups.indexOf(g);
+        if (i >= 0) editGroups.splice(i, 1);
+        else editGroups.push(g);
+        fillGroupPicker();
+      };
+    });
   }
 
   function openEdit(it) {
@@ -711,8 +741,10 @@ main{padding:14px 16px 0}
     $('f_name').value = it?.name || '';
     $('f_no').value = it?.no || '';
     $('f_platform').value = (it && it.platform) ? it.platform : 'other';
-    fillGroupSelect($('f_group'));
-    $('f_group').value = it?.group || '';
+    editGroups = it
+      ? (Array.isArray(it.groups) ? it.groups.slice() : (it.group ? [it.group] : []))
+      : [];
+    fillGroupPicker();
     $('f_pickup').value = it?.pickup || '';
     $('f_note').value = it?.note || '';
     $('delItem').style.display = it ? 'block' : 'none';
@@ -725,10 +757,12 @@ main{padding:14px 16px 0}
     const name = $('f_name').value.trim();
     const no = $('f_no').value.trim().toUpperCase().replace(/\s+/g, '');
     if (!no) return toast('快递单号必填');
+    const groups = editGroups.slice();
     const data = {
       name, no,
       platform: $('f_platform').value,
-      group: $('f_group').value,
+      groups,
+      group: groups[0] || '',
       pickup: $('f_pickup').value.trim(),
       note: $('f_note').value.trim(),
     };
@@ -825,7 +859,7 @@ main{padding:14px 16px 0}
     if (!room) { if (!silent) toast('先在设置里填房间码'); return; }
     if (syncing) return;
     const roomGroup = (db.settings.roomGroup || '').trim();
-    const inRoom = (it) => (roomGroup ? it.group === roomGroup : false);
+    const inRoom = (it) => (roomGroup ? itemInGroup(it, roomGroup) : false);
 
     syncing = true;
     try {
@@ -850,7 +884,11 @@ main{padding:14px 16px 0}
       // 只替换该分组的包裹，其他分组原样保留
       const others = db.items.filter((i) => !inRoom(i));
       const remote = Array.isArray(j.items) ? j.items : [];
-      db.items = others.concat(remote.map((it) => ({ ...it, group: roomGroup || it.group })));
+      db.items = others.concat(remote.map((it) => {
+        const gs = Array.isArray(it.groups) ? it.groups.slice() : (it.group ? [it.group] : []);
+        if (roomGroup && !gs.includes(roomGroup)) gs.push(roomGroup);
+        return { ...it, groups: gs, group: gs[0] || '' };
+      }));
 
       lastSync = new Date().toISOString();
       localStorage.setItem(KEY, JSON.stringify(db));
@@ -908,20 +946,26 @@ main{padding:14px 16px 0}
     if (groupEditing) {
       const idx = db.groups.indexOf(groupEditing);
       if (idx >= 0) db.groups[idx] = name;
-      db.items.forEach((it) => { if (it.group === groupEditing) it.group = name; });
+      db.items.forEach((it) => {
+        const gs = Array.isArray(it.groups) ? it.groups : (it.group ? [it.group] : []);
+        const j = gs.indexOf(groupEditing);
+        if (j >= 0) gs[j] = name;
+        it.groups = gs;
+        it.group = gs[0] || '';
+      });
       // 改的正好是家庭码绑定的分组 → 绑定名跟着改，不然同步会断
       if (db.settings.roomGroup === groupEditing) db.settings.roomGroup = name;
       const gi = filter.groups.indexOf(groupEditing);
       if (gi >= 0) filter.groups[gi] = name;
+      const ei = editGroups.indexOf(groupEditing);
+      if (ei >= 0) editGroups[ei] = name;
     } else {
       db.groups.push(name);
+      if ($('editSheet') && $('editSheet').classList.contains('on')) editGroups.push(name);
     }
-    save(); refreshFilters(); render(); closeSheets();
-    if (groupEditing) {
-      // 正在编辑包裹的话，顺手把下拉选中新名字
-      const sel = $('f_group');
-      if (sel) { fillGroupSelect(sel); sel.value = name; }
-    }
+    save(); refreshFilters(); render();
+    if ($('editSheet') && $('editSheet').classList.contains('on')) fillGroupPicker();
+    closeSheets();
     toast('已保存');
   };
 
@@ -929,8 +973,14 @@ main{padding:14px 16px 0}
     if (!groupEditing) return;
     if (!confirm(`删除分组「${groupEditing}」？里面的包裹会变成未分组`)) return;
     db.groups = db.groups.filter((g) => g !== groupEditing);
-    db.items.forEach((it) => { if (it.group === groupEditing) it.group = ''; });
+    db.items.forEach((it) => {
+      const gs = (Array.isArray(it.groups) ? it.groups : (it.group ? [it.group] : []))
+        .filter((g) => g !== groupEditing);
+      it.groups = gs;
+      it.group = gs[0] || '';
+    });
     filter.groups = filter.groups.filter((g) => g !== groupEditing);
+    editGroups = editGroups.filter((g) => g !== groupEditing);
     if (db.settings.roomGroup === groupEditing) {
       db.settings.roomGroup = '';
       db.settings.room = '';
@@ -980,7 +1030,7 @@ main{padding:14px 16px 0}
     return new TextDecoder().decode(bytes);
   }
 
-  const SHARE_FIELDS = ['name', 'no', 'platform', 'group', 'note', 'pickup', 'status',
+  const SHARE_FIELDS = ['name', 'no', 'platform', 'group', 'groups', 'note', 'pickup', 'status',
     'statusText', 'carrier', 'latest', 'latestTime', 'events', 'updatedAt', 'createdAt', 'archived'];
 
   function buildShareCode(items) {
@@ -1013,7 +1063,7 @@ main{padding:14px 16px 0}
         ? db.items.find((i) => (i.no || '').toUpperCase() === key)
         : db.items.find((i) => !i.no && i.name === inc.name);
       if (!exist) {
-        db.items.push({ id: uid(), status: 'pending', events: [], ...inc });
+        db.items.push(normalizeItem({ id: uid(), status: 'pending', events: [], ...inc }));
         added++;
       } else {
         // 同单号：只补空字段，再用更新的轨迹覆盖
