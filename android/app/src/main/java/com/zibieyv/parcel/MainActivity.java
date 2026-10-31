@@ -25,6 +25,10 @@ import android.widget.Toast;
 public class MainActivity extends Activity implements Bridge.Sink {
 
     private static final String HOME = "https://parcel.zibieyv.com";
+
+    /** 读屏抓到的单号，等网页来取 */
+    public static volatile String PENDING_ADD = "";
+
     private WebView web;
     private volatile boolean pageReady = false;
     private long downloadingId = -1;
@@ -83,6 +87,18 @@ public class MainActivity extends Activity implements Bridge.Sink {
     public void onBackPressed() {
         if (web != null && web.canGoBack()) web.goBack();
         else super.onBackPressed();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        // 从读屏悬浮球跳回来时，通知网页去取单号
+        runOnUiThread(() -> {
+            if (pageReady && web != null) {
+                web.evaluateJavascript(
+                        "window.__checkPendingAdd && window.__checkPendingAdd()", null);
+            }
+        });
     }
 
     @Override
@@ -221,6 +237,39 @@ public class MainActivity extends Activity implements Bridge.Sink {
         public boolean notificationAccessEnabled() {
             String flat = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
             return flat != null && flat.contains(getPackageName());
+        }
+
+        /** 网页来取读屏抓到的单号，取一次就清空 */
+        @JavascriptInterface
+        public String consumePendingAdd() {
+            String s = PENDING_ADD;
+            PENDING_ADD = "";
+            return s;
+        }
+
+        /** 读屏（无障碍）有没有开 */
+        @JavascriptInterface
+        public boolean accessibilityEnabled() {
+            try {
+                String flat = Settings.Secure.getString(getContentResolver(),
+                        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                if (flat == null) return false;
+                return flat.contains(getPackageName());
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        /** 打开无障碍设置页，让用户给「包裹」开读屏 */
+        @JavascriptInterface
+        public void openAccessibilitySettings() {
+            runOnUiThread(() -> {
+                try {
+                    Intent i = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                } catch (Exception ignored) {}
+            });
         }
 
         /** 打开应用详情页，方便改短信权限 */

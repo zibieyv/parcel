@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">包裹</string>
+    <string name="acc_desc">读取购物软件的物流页面，自动识别快递单号并添加到「包裹」。只在本机处理，不上传任何内容。</string>
+</resources>
