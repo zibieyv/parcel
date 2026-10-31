@@ -94,6 +94,7 @@ module.exports = async function handler(req, res) {
       return send(200, {
         ok: true,
         rev: prev?.rev || 0,
+        roomName: prev?.roomName || '',
         items: prev?.items || [],
         groups: prev?.groups || [],
         updatedAt: prev?.updatedAt || null,
@@ -114,12 +115,17 @@ module.exports = async function handler(req, res) {
       deleted: body.deleted && typeof body.deleted === 'object' ? body.deleted : {},
     });
 
+    // 房间名以第一次创建时为准，后来的人跟随，不再各写各的
+    const wanted = String(body.roomName || '').trim().slice(0, 20);
+    merged.roomName = (prev && prev.roomName) || wanted || '';
+
     // 房间 90 天没人动就自动过期，免得白占存储
     await redisSet(key, JSON.stringify(merged), 90 * 86400);
 
     return send(200, {
       ok: true,
       rev: merged.rev,
+      roomName: merged.roomName,
       items: merged.items,
       groups: merged.groups,
       updatedAt: merged.updatedAt,

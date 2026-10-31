@@ -909,17 +909,35 @@ main{padding:14px 16px 0}
           items: shared,
           groups: roomGroup ? [roomGroup] : [],
           deleted: db.deleted || {},
+          roomName: roomGroup || '',
         }),
       });
       const j = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
       if (!j.ok) throw new Error(j.error || 'HTTP ' + r.status);
+
+      // 房间名以创建者为准：后来的人自动跟随，把自己写错的名字并过去
+      let canonical = (j.roomName || '').trim() || roomGroup;
+      if (canonical && canonical !== db.settings.roomGroup) {
+        const wrong = db.settings.roomGroup;
+        db.settings.roomGroup = canonical;
+        if (!db.groups.includes(canonical)) db.groups.push(canonical);
+        if (wrong) {
+          db.groups = db.groups.filter((g) => g !== wrong);
+          db.items.forEach((it) => {
+            const gs = Array.isArray(it.groups) ? it.groups : (it.group ? [it.group] : []);
+            it.groups = gs.map((g) => (g === wrong ? canonical : g));
+            it.group = it.groups[0] || '';
+          });
+        }
+      }
 
       // 只替换该分组的包裹，其他分组原样保留
       const others = db.items.filter((i) => !inRoom(i));
       const remote = Array.isArray(j.items) ? j.items : [];
       db.items = others.concat(remote.map((it) => {
         const gs = Array.isArray(it.groups) ? it.groups.slice() : (it.group ? [it.group] : []);
-        if (roomGroup && !gs.includes(roomGroup)) gs.push(roomGroup);
+        const tag = canonical || roomGroup;
+        if (tag && !gs.includes(tag)) gs.push(tag);
         return { ...it, groups: gs, group: gs[0] || '' };
       }));
       dedupeByNo();
