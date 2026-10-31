@@ -167,7 +167,7 @@ main{padding:14px 16px 0}
         <select id="f_group"></select>
       </div>
     </div>
-    <div class="field"><label>取件码（可留空）</label><input id="f_pickup" placeholder="123456" inputmode="numeric"></div>
+    <div class="field"><label>取件码（大多留空，到站会自动填）</label><input id="f_pickup" placeholder="6-4-12003"></div>
     <div class="field"><label>备注</label><textarea id="f_note" placeholder="放哪个驿站 / 给谁的 / 多少钱"></textarea></div>
     <button class="primary" id="saveItem">保存</button>
     <button class="ghost danger" id="delItem" style="display:none">删除这个包裹</button>
@@ -603,18 +603,29 @@ main{padding:14px 16px 0}
   }
 
   /* ---------- 原生注入的取件码 ---------- */
-  window.__onPickupCode = function (code, source) {
+  window.__onPickupCode = function (code, tracking, source) {
     code = String(code || '').trim();
     if (!code) return;
+    const norm = (s) => String(s || '').toUpperCase().replace(/\s+/g, '');
     db.pendingCodes = db.pendingCodes || [];
-    const target = db.items.filter((i) => !i.archived && i.status !== 'delivered' && !i.pickup)[0];
+
+    // 1. 先按短信里带的单号精确匹配
+    let target = tracking ? db.items.find((i) => !i.archived && norm(i.no) === norm(tracking)) : null;
+    // 2. 没匹配到，退而求其次：最新一件还没填码的在途包裹
+    if (!target) {
+      target = db.items.filter((i) => !i.archived && i.status !== 'delivered' && !i.pickup)[0];
+    }
+
     if (target) {
+      if (target.pickup === code) return; // 已经填过了
       target.pickup = code;
       target.pickupSource = source || '';
+      target.status = 'pickup';
+      target.statusText = '待取件';
       save(); render();
       toast(`取件码 ${code} 已填入「${target.name || target.no || '包裹'}」`);
     } else {
-      db.pendingCodes.unshift({ code, source: source || '', at: new Date().toISOString() });
+      db.pendingCodes.unshift({ code, tracking: tracking || '', source: source || '', at: new Date().toISOString() });
       save(); render();
       toast(`收到取件码 ${code}，点顶部卡片应用`);
     }

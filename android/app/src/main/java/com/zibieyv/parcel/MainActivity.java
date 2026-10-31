@@ -57,9 +57,9 @@ public class MainActivity extends Activity implements Bridge.Sink {
     }
 
     @Override
-    public void onPickupCode(String code, String source) {
+    public void onPickupCode(String code, String tracking, String source) {
         final String js = "window.__onPickupCode && window.__onPickupCode("
-                + jsStr(code) + "," + jsStr(source) + ")";
+                + jsStr(code) + "," + jsStr(tracking) + "," + jsStr(source) + ")";
         runOnUiThread(() -> {
             if (pageReady) web.evaluateJavascript(js, null);
         });

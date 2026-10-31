@@ -10,7 +10,7 @@ import java.util.Deque;
 public final class Bridge {
 
     public interface Sink {
-        void onPickupCode(String code, String source);
+        void onPickupCode(String code, String tracking, String source);
     }
 
     private static final Deque<String[]> QUEUE = new ArrayDeque<>();
@@ -27,14 +27,19 @@ public final class Bridge {
         if (sink == s) sink = null;
     }
 
-    /** 任何线程都能调用 */
-    static void deliver(String code, String source) {
+    /** 任何线程都能调用。tracking 可能为 null */
+    static void deliver(String code, String tracking, String source) {
         if (code == null) return;
         String c = code.trim();
         if (c.isEmpty()) return;
+        String[] item = new String[]{
+                c,
+                tracking == null ? "" : tracking.trim().toUpperCase(),
+                source == null ? "" : source
+        };
         synchronized (QUEUE) {
             if (QUEUE.size() > 20) QUEUE.pollFirst();
-            QUEUE.addLast(new String[]{c, source == null ? "" : source});
+            QUEUE.addLast(item);
         }
         flush();
     }
@@ -48,7 +53,7 @@ public final class Bridge {
                 item = QUEUE.pollFirst();
             }
             if (item == null) break;
-            s.onPickupCode(item[0], item[1]);
+            s.onPickupCode(item[0], item[1].isEmpty() ? null : item[1], item[2]);
         }
     }
 }

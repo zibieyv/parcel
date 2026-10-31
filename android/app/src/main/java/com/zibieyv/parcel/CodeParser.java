@@ -3,27 +3,43 @@ package com.zibieyv.parcel;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** 从短信 / 通知文本里抠取件码 */
+/** 从短信 / 通知文本里抠取件码和快递单号 */
 final class CodeParser {
 
-    private static final Pattern[] PATTERNS = new Pattern[]{
+    private static final Pattern[] CODE_PATTERNS = new Pattern[]{
             Pattern.compile("(?:取件[码碼]|提货[码碼]|提貨[码碼]|取货[码碼]|取貨[码碼]|领取[码碼]|領取[码碼])[^0-9]{0,6}([0-9][0-9\\-－]{2,12})"),
             Pattern.compile("(?:[码碼]\\s*[:：]\\s*)([0-9][0-9\\-－]{2,12})"),
             Pattern.compile("([0-9]{2}-[0-9]{1,3}-[0-9]{3,5})"),
+    };
+
+    /** 带前缀的单号优先，其次国际单号，最后才是裸数字 */
+    private static final Pattern[] TRACKING_PATTERNS = new Pattern[]{
+            Pattern.compile("\\b((?:YT|JT|SF|JD|DPK|ZTO)[0-9]{9,16})\\b", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("\\b([A-Z]{2}[0-9]{9}[A-Z]{2})\\b"),
+            Pattern.compile("\\b([0-9]{12,18})\\b"),
     };
 
     private CodeParser() {}
 
     static String find(String text) {
         if (text == null || text.isEmpty()) return null;
-        for (Pattern p : PATTERNS) {
+        for (Pattern p : CODE_PATTERNS) {
             Matcher m = p.matcher(text);
             if (m.find()) {
                 String code = m.group(1).replace('－', '-').trim();
-                // 太短的数字（例如年份、电话）不要
                 String digits = code.replaceAll("\\D", "");
+                // 太短的数字（例如年份、电话）不要
                 if (digits.length() >= 4) return code;
             }
+        }
+        return null;
+    }
+
+    static String findTracking(String text) {
+        if (text == null || text.isEmpty()) return null;
+        for (Pattern p : TRACKING_PATTERNS) {
+            Matcher m = p.matcher(text);
+            if (m.find()) return m.group(1).toUpperCase();
         }
         return null;
     }

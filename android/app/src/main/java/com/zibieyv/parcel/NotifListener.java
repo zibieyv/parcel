@@ -28,8 +28,9 @@ public class NotifListener extends NotificationListenerService {
         String code = CodeParser.find(all);
         if (code == null) return;
 
+        String tracking = CodeParser.findTracking(all);
         String src = appLabel(sbn.getPackageName());
-        Bridge.deliver(code, src);
+        Bridge.deliver(code, tracking, src);
     }
 
     private String appLabel(String pkg) {

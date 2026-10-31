@@ -30,8 +30,8 @@ public class SmsReceiver extends BroadcastReceiver {
         if (!CodeParser.looksLikeParcel(body)) return;
         String code = CodeParser.find(body);
         if (code != null) {
-            String from = "短信";
-            Bridge.deliver(code, from);
+            String tracking = CodeParser.findTracking(body);
+            Bridge.deliver(code, tracking, "短信");
         }
     }
 }
