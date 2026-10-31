@@ -208,7 +208,10 @@ main{padding:14px 16px 0}
         </select>
       </div>
       <div class="field"><label>分组</label>
-        <select id="f_group"></select>
+        <div style="display:flex;gap:8px">
+          <select id="f_group" style="flex:1"></select>
+          <button class="ghost" id="newGroupBtn" style="width:auto;margin:0;padding:0 14px;flex:0 0 auto">＋</button>
+        </div>
       </div>
     </div>
     <div class="field"><label>取件码（大多留空，到站会自动填）</label><input id="f_pickup" placeholder="6-4-12003"></div>
@@ -241,11 +244,6 @@ main{padding:14px 16px 0}
         分享码是一段文本，发给对方粘进来即可导入（按单号自动去重合并）。
       </p>
     </div>
-
-    <div class="field"><label>分组（每行作为一组）</label>
-      <textarea id="s_groups" placeholder="我的&#10;家人的&#10;博客来"></textarea>
-    </div>
-    <button class="ghost" id="saveGroups">保存分组</button>
 
     <div style="margin-top:22px">
       <div class="field"><label>家庭同步（可选，需在 Vercel 配 Upstash）</label>
@@ -285,6 +283,16 @@ main{padding:14px 16px 0}
   </div>
 </div>
 
+<!-- 新建 / 编辑分组 -->
+<div class="sheet" id="groupSheet">
+  <div class="panel">
+    <h2><span id="groupTitle">新建分组</span><button class="x" data-close>关闭</button></h2>
+    <div class="field"><label>分组名</label><input id="groupName" placeholder="比如：我的 / 家人 / 办公室"></div>
+    <button class="primary" id="groupSave">保存</button>
+    <button class="ghost danger" id="groupDelete" style="display:none">删除这个分组</button>
+  </div>
+</div>
+
 <input type="file" id="fileInput" accept="application/json" style="display:none">
 
 <!-- 权限确认 -->
@@ -318,7 +326,7 @@ main{padding:14px 16px 0}
   const KEY = 'parcel.v1';
   const PLATFORM_NAME = {
     taobao:'淘宝', jd:'京东', pdd:'拼多多', douyin:'抖音', taobaoflash:'淘宝闪送',
-    meituan:'美团', jdwaimai:'京东外卖', books:'博客来', other:'其他'
+    meituan:'美团', jdwaimai:'京东外卖', books:'博客来', other:'默认'
   };
   const STATUS_NAME = {
     pending:'待发货', in_transit:'运输中', pickup:'待取件', delivering:'派送中',
@@ -394,6 +402,7 @@ main{padding:14px 16px 0}
 
   /* ---------- 筛选 ---------- */
   let filter = { type: 'all' };
+  let lpFired = false;
 
   function refreshFilters() {
     const types = [
@@ -407,6 +416,7 @@ main{padding:14px 16px 0}
     for (const g of db.groups) {
       groupHtml += `<button class="chip ${filter.type==='g:'+g?'on':''}" data-f="g:${esc(g)}">${esc(g)}</button>`;
     }
+    groupHtml += `<button class="chip" data-f="__new" style="color:#9db8ff">＋</button>`;
 
     $('typeFilters').innerHTML = typeHtml;
     $('groupFilters').innerHTML = groupHtml;
@@ -414,12 +424,29 @@ main{padding:14px 16px 0}
     const onClick = (e) => {
       const b = e.target.closest('[data-f]');
       if (!b) return;
+      if (lpFired) { lpFired = false; return; }
+      if (b.dataset.f === '__new') { openGroupSheet(null); return; }
       filter.type = b.dataset.f;
       refreshFilters();
       render();
     };
     $('typeFilters').onclick = onClick;
     $('groupFilters').onclick = onClick;
+
+    // 长按分组胶囊 → 改名 / 删除
+    let lpTimer = null;
+    $('groupFilters').ontouchstart = (e) => {
+      const b = e.target.closest('[data-f]');
+      if (!b || !b.dataset.f.startsWith('g:') || b.dataset.f === 'g:') return;
+      clearTimeout(lpTimer);
+      lpTimer = setTimeout(() => {
+        lpFired = true;
+        openGroupSheet(b.dataset.f.slice(2));
+      }, 550);
+    };
+    ['touchend', 'touchmove', 'touchcancel'].forEach((ev) => {
+      $('groupFilters').addEventListener(ev, () => clearTimeout(lpTimer), { passive: true });
+    });
   }
 
   /* ---------- 列表 ---------- */
@@ -651,7 +678,6 @@ main{padding:14px 16px 0}
     $('f_note').value = it?.note || '';
     $('delItem').style.display = it ? 'block' : 'none';
     openSheet('editSheet');
-    if (!it) setTimeout(() => $('f_name').focus(), 250);
   }
 
   $('addBtn').onclick = () => openEdit(null);
@@ -717,7 +743,6 @@ main{padding:14px 16px 0}
     $('s_base').value = db.settings.base || location.origin;
     $('s_token').value = db.settings.token || '';
     $('s_room').value = db.settings.room || '';
-    $('s_groups').value = db.groups.join('\n');
     refreshSyncState();
     openSheet('setSheet');
   };
@@ -811,10 +836,48 @@ main{padding:14px 16px 0}
 
   $('syncNow').onclick = () => syncNow(false).catch(() => {});
 
-  $('saveGroups').onclick = () => {
-    db.groups = $('s_groups').value.split('\n').map((s) => s.trim()).filter(Boolean);
-    save(); refreshFilters(); render(); toast('分组已保存');
+  /* ---------- 分组：首页新建 / 长按改名删除 ---------- */
+  let groupEditing = null; // null=新建，否则=原名
+
+  function openGroupSheet(name) {
+    groupEditing = name || null;
+    $('groupTitle').textContent = name ? '编辑分组' : '新建分组';
+    $('groupName').value = name || '';
+    $('groupDelete').style.display = name ? 'block' : 'none';
+    openSheet('groupSheet');
+    setTimeout(() => $('groupName').focus(), 250);
+  }
+
+  $('groupSave').onclick = () => {
+    const name = $('groupName').value.trim();
+    if (!name) return toast('起个名字');
+    if (!groupEditing && db.groups.includes(name)) return toast('这个分组已经有了');
+
+    if (groupEditing) {
+      const idx = db.groups.indexOf(groupEditing);
+      if (idx >= 0) db.groups[idx] = name;
+      db.items.forEach((it) => { if (it.group === groupEditing) it.group = name; });
+    } else {
+      db.groups.push(name);
+    }
+    save(); refreshFilters(); render(); closeSheets();
+    if (groupEditing) {
+      // 正在编辑包裹的话，顺手把下拉选中新名字
+      const sel = $('f_group');
+      if (sel) { fillGroupSelect(sel); sel.value = name; }
+    }
+    toast('已保存');
   };
+
+  $('groupDelete').onclick = () => {
+    if (!groupEditing) return;
+    if (!confirm(`删除分组「${groupEditing}」？里面的包裹会变成未分组`)) return;
+    db.groups = db.groups.filter((g) => g !== groupEditing);
+    db.items.forEach((it) => { if (it.group === groupEditing) it.group = ''; });
+    save(); refreshFilters(); render(); closeSheets(); toast('已删除');
+  };
+
+  $('newGroupBtn').onclick = () => openGroupSheet(null);
 
   $('exportData').onclick = () => {
     const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
