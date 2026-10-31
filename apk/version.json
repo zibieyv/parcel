@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "0.5",
-  "url": "/apk/parcel-0.5.apk",
-  "notes": "App 内检查更新并直接安装"
+  "versionCode": 6,
+  "versionName": "0.6",
+  "url": "/apk/parcel-0.6.apk",
+  "notes": "换成手绘图标"
 }
