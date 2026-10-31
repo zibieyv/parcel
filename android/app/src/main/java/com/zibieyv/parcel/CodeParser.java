@@ -12,11 +12,14 @@ final class CodeParser {
             Pattern.compile("([0-9]{2}-[0-9]{1,3}-[0-9]{3,5})"),
     };
 
-    /** 带前缀的单号优先，其次国际单号，最后才是裸数字 */
+    /**
+     * 带前缀的单号优先，其次国际单号，最后才是裸数字。
+     * 不用 \b：Java 的 \b 对中文的判定容易出意外，这里显式用 ASCII 前后瞻。
+     */
     private static final Pattern[] TRACKING_PATTERNS = new Pattern[]{
-            Pattern.compile("\\b((?:YT|JT|SF|JD|DPK|ZTO)[0-9]{9,16})\\b", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("\\b([A-Z]{2}[0-9]{9}[A-Z]{2})\\b"),
-            Pattern.compile("\\b([0-9]{12,18})\\b"),
+            Pattern.compile("(?<![A-Za-z0-9])((?:YT|JT|SF|JD|DPK|ZTO)[0-9]{9,16})(?![0-9])", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(?<![A-Za-z0-9])([A-Z]{2}[0-9]{9}[A-Z]{2})(?![A-Za-z0-9])"),
+            Pattern.compile("(?<![A-Za-z0-9])([0-9]{12,18})(?![0-9])"),
     };
 
     private CodeParser() {}
