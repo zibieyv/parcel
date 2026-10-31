@@ -56,13 +56,17 @@ public class ParcelAccessibilityService extends AccessibilityService {
             "(?<![A-Za-z0-9])([0-9]{12,18})(?![0-9])");
     private static final Pattern KEYWORD = Pattern.compile("快递|快件|运单|物流|包裹|已签收|运输中|派送|揽收");
 
-    private static final String HINT = "找到待收货包裹，在有快递单号的页面，点击大肥鱼添加包裹";
+    private static final String HINT =
+            "找到待收货包裹，在有快递单号的页面，点击大肥鱼添加包裹\n"
+            + "点击此处收起提示，拖动肥鱼";
 
     private WindowManager wm;
     private LinearLayout root;
     private TextView pill;
     private ImageView ballView;
+    private ImageView cardIcon;
     private LinearLayout cardView;
+    private int cardWidthPx = 0;
     private WindowManager.LayoutParams params;
     private View resultCard;
     private boolean expanded = true;
@@ -146,8 +150,6 @@ public class ParcelAccessibilityService extends AccessibilityService {
                     if (!dragging) {
                         dragging = Math.abs(e.getRawX() - downX) > dp(8)
                                 || Math.abs(e.getRawY() - downY) > dp(8);
-                        // 一开始拖就把卡片收成小球：只切显隐，不重建视图
-                        if (dragging && expanded) setExpanded(false, false);
                     }
                     params.x = startX + (int) (e.getRawX() - downX);
                     params.y = startY + (int) (e.getRawY() - downY);
@@ -201,8 +203,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
     }
 
     private void clampPosition() {
-        int w = expanded ? dp(268) : dp(58);
-        int h = expanded ? dp(130) : dp(86);
+        int w = expanded ? (cardWidthPx > 0 ? cardWidthPx : dp(360)) : dp(58);
+        int h = expanded ? dp(140) : dp(86);
         int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - w);
         int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - h);
         params.x = Math.max(0, Math.min(params.x, maxX));
@@ -240,26 +242,31 @@ public class ParcelAccessibilityService extends AccessibilityService {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(10), dp(10), dp(8), dp(10));
+        card.setPadding(dp(10), dp(10), dp(10), dp(10));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.WHITE);
         bg.setCornerRadius(dp(18));
         bg.setStroke(dp(1), Color.parseColor("#d5dff2"));
         card.setBackground(bg);
+
+        // 屏宽不够时自动收窄，保证两行放得下
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        int cardW = Math.min(dp(360), screenW - dp(8));
+        cardWidthPx = cardW;
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
-                dp(268), LinearLayout.LayoutParams.WRAP_CONTENT);
+                cardW, LinearLayout.LayoutParams.WRAP_CONTENT);
         clp.topMargin = dp(6);
         card.setLayoutParams(clp);
 
-        ImageView icon = new ImageView(this);
-        icon.setImageDrawable(roundedBall(dp(76)));
+        cardIcon = new ImageView(this);
+        cardIcon.setImageDrawable(roundedBall(dp(76)));
         LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(38), dp(38));
         ip.rightMargin = dp(8);
-        card.addView(icon, ip);
+        card.addView(cardIcon, ip);
 
         TextView tv = new TextView(this);
-        tv.setTextSize(12);
-        tv.setLineSpacing(dp(2), 1f);
+        tv.setTextSize(10.5f);
+        tv.setLineSpacing(dp(3), 1f);
         tv.setText(highlight(HINT));
         card.addView(tv);
         return card;
@@ -268,11 +275,14 @@ public class ParcelAccessibilityService extends AccessibilityService {
     private CharSequence highlight(String text) {
         SpannableString ss = new SpannableString(text);
         int orange = Color.parseColor("#F5822B");
-        for (String kw : new String[]{"待收货包裹", "快递单号", "大肥鱼"}) {
-            int i = text.indexOf(kw);
-            if (i >= 0) {
+        for (String kw : new String[]{"待收货包裹", "快递单号", "大肥鱼", "收起提示", "拖动肥鱼"}) {
+            int from = 0;
+            while (true) {
+                int i = text.indexOf(kw, from);
+                if (i < 0) break;
                 ss.setSpan(new ForegroundColorSpan(orange), i, i + kw.length(),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                from = i + kw.length();
             }
         }
         return ss;
@@ -281,7 +291,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
     /* ---------------- 点击分发 ---------------- */
 
     private void handleTap(float rawX, float rawY) {
-        View[] targets = new View[]{pill, ballView, cardView};
+        // 先小后大：鱼图标优先于整张卡片
+        View[] targets = new View[]{pill, cardIcon, ballView, cardView};
         for (View v : targets) {
             if (v == null || v.getVisibility() != View.VISIBLE) continue;
             int[] loc = new int[2];
@@ -293,8 +304,10 @@ public class ParcelAccessibilityService extends AccessibilityService {
                 openApp();
             } else if (v == ballView) {
                 setExpanded(true);
+            } else if (v == cardIcon) {
+                onBallTap();          // 点鱼 → 识屏
             } else {
-                onBallTap();
+                setExpanded(false);   // 点卡片空白 → 收起
             }
             return;
         }

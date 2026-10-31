@@ -1,6 +1,6 @@
 {
-  "versionCode": 15,
-  "versionName": "0.15",
-  "url": "/apk/parcel-0.15.apk",
-  "notes": "收起不再重建视图，拖动更顺"
+  "versionCode": 16,
+  "versionName": "0.16",
+  "url": "/apk/parcel-0.16.apk",
+  "notes": "点卡片收起提示，拖动不再自动收起"
 }
