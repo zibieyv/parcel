@@ -33,10 +33,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,8 +42,8 @@ import java.util.regex.Pattern;
 /**
  * 读屏抓单号 + 可展开的悬浮窗。
  *
- * 收起态：只有一个大肥鱼头像，点它展开；
- * 展开态：上面「‹ 返回软件」，下面白卡片带提示文字，点卡片里的鱼才去识屏。
+ * 收起态：只有一个大肥鱼头像；点它展开提示卡片；点卡片里的鱼去识屏。
+ * 两种状态的视图都是建好常驻的，切换只改 visibility —— 拖动时才不会卡。
  */
 public class ParcelAccessibilityService extends AccessibilityService {
 
@@ -62,20 +60,20 @@ public class ParcelAccessibilityService extends AccessibilityService {
 
     private WindowManager wm;
     private LinearLayout root;
+    private TextView pill;
+    private ImageView ballView;
+    private LinearLayout cardView;
     private WindowManager.LayoutParams params;
-    private View cardResult;
-    private boolean expanded = false;
+    private View resultCard;
+    private boolean expanded = true;
 
     private int startX, startY;
     private float downX, downY;
     private long downTime;
     private boolean dragging = false;
 
-    /** 点哪个控件做什么 */
-    private final Map<View, Runnable> tapActions = new LinkedHashMap<>();
-
     private final Handler ui = new Handler(Looper.getMainLooper());
-    private final Runnable collapseTask = this::collapse;
+    private final Runnable collapseTask = () -> setExpanded(false);
 
     /* ---------------- 生命周期 ---------------- */
 
@@ -84,8 +82,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
         super.onServiceConnected();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         buildRoot();
-        // 首次连上先展开提示，8 秒后自动收起
-        ui.postDelayed(this::collapse, 8000);
+        ui.postDelayed(collapseTask, 8000);
     }
 
     @Override
@@ -102,11 +99,11 @@ public class ParcelAccessibilityService extends AccessibilityService {
         if (wm != null && root != null && root.getParent() != null) {
             try { wm.removeView(root); } catch (Exception ignored) {}
         }
-        removeCard();
+        removeResultCard();
         super.onDestroy();
     }
 
-    /* ---------------- 布局 ---------------- */
+    /* ---------------- 建一次，之后只切显隐 ---------------- */
 
     private int dp(float v) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v,
@@ -116,8 +113,14 @@ public class ParcelAccessibilityService extends AccessibilityService {
     private void buildRoot() {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        // 左对齐：展开/收起时「返回软件」始终停在同一个位置
         root.setGravity(Gravity.START);
+
+        pill = buildPill();
+        ballView = buildBall();
+        cardView = buildHintCard();
+        root.addView(pill);
+        root.addView(ballView);
+        root.addView(cardView);
 
         params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -129,42 +132,38 @@ public class ParcelAccessibilityService extends AccessibilityService {
         params.x = dp(2);
         params.y = (int) (getResources().getDisplayMetrics().heightPixels * 0.55);
 
-        root.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent e) {
-                switch (e.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        startX = params.x;
-                        startY = params.y;
-                        downX = e.getRawX();
-                        downY = e.getRawY();
-                        downTime = System.currentTimeMillis();
-                        dragging = false;
-                        return true;
-                    case MotionEvent.ACTION_MOVE:
-                        // 一开始拖就把展开的提示收回去，只留小球
-                        if (!dragging) {
-                            dragging = Math.abs(e.getRawX() - downX) > dp(8)
-                                    || Math.abs(e.getRawY() - downY) > dp(8);
-                            // 原地收起：窗口坐标不动，保持手指和窗口的相对位置
-                            if (dragging && expanded) collapseInPlace();
-                        }
-                        params.x = startX + (int) (e.getRawX() - downX);
-                        params.y = startY + (int) (e.getRawY() - downY);
-                        clampPosition();
-                        if (root.getParent() != null) {
-                            try { wm.updateViewLayout(root, params); } catch (Exception ignored) {}
-                        }
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                        if (!dragging && System.currentTimeMillis() - downTime < 400) {
-                            handleTap(e.getRawX(), e.getRawY());
-                        }
-                        dragging = false;
-                        return true;
-                }
-                return false;
+        root.setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    startX = params.x;
+                    startY = params.y;
+                    downX = e.getRawX();
+                    downY = e.getRawY();
+                    downTime = System.currentTimeMillis();
+                    dragging = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (!dragging) {
+                        dragging = Math.abs(e.getRawX() - downX) > dp(8)
+                                || Math.abs(e.getRawY() - downY) > dp(8);
+                        // 一开始拖就把卡片收成小球：只切显隐，不重建视图
+                        if (dragging && expanded) setExpanded(false, false);
+                    }
+                    params.x = startX + (int) (e.getRawX() - downX);
+                    params.y = startY + (int) (e.getRawY() - downY);
+                    clampPosition();
+                    if (root.getParent() != null) {
+                        try { wm.updateViewLayout(root, params); } catch (Exception ignored) {}
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (!dragging && System.currentTimeMillis() - downTime < 400) {
+                        handleTap(e.getRawX(), e.getRawY());
+                    }
+                    dragging = false;
+                    return true;
             }
+            return false;
         });
 
         try {
@@ -173,67 +172,71 @@ public class ParcelAccessibilityService extends AccessibilityService {
             toast("悬浮窗创建失败：" + e.getMessage());
             return;
         }
-        expanded = true;
-        render();
+        setExpanded(true);
     }
 
-    private void render() {
-        rebuild();
+    private void setExpanded(boolean value) {
+        setExpanded(value, true);
+    }
+
+    /**
+     * @param applyNow 是否立刻提交布局。拖动开始时传 false，
+     *                 紧接着的那次 updateViewLayout 会把尺寸和位置一起生效，
+     *                 少一次布局，拖动更顺。
+     */
+    private void setExpanded(boolean value, boolean applyNow) {
+        if (root == null) return;
+        expanded = value;
+        if (ballView != null) ballView.setVisibility(value ? View.GONE : View.VISIBLE);
+        if (cardView != null) cardView.setVisibility(value ? View.VISIBLE : View.GONE);
         clampPosition();
-        applyLayout();
+        if (applyNow) applyLayout();
+        ui.removeCallbacks(collapseTask);
+        if (value) ui.postDelayed(collapseTask, 12000);
     }
 
-    /** 只重建子视图并测量，不动窗口位置 */
-    private void rebuild() {
-        tapActions.clear();
-        root.removeAllViews();
-
-        root.addView(buildPill());
-        root.addView(expanded ? buildHintCard() : buildBall());
-
-        root.measure(
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-    }
-
-    /** 把位置/尺寸提交给 WindowManager */
     private void applyLayout() {
-        if (root.getParent() == null) return;
+        if (root == null || root.getParent() == null) return;
         try { wm.updateViewLayout(root, params); } catch (Exception ignored) {}
     }
 
-    private View buildPill() {
+    private void clampPosition() {
+        int w = expanded ? dp(268) : dp(58);
+        int h = expanded ? dp(130) : dp(86);
+        int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - w);
+        int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - h);
+        params.x = Math.max(0, Math.min(params.x, maxX));
+        params.y = Math.max(0, Math.min(params.y, maxY));
+    }
+
+    private TextView buildPill() {
         TextView back = new TextView(this);
         back.setText("‹ 返回软件");
-        // 和收起态的小球同宽（58dp），左对齐后两边正好平齐
         back.setTextSize(9.5f);
         back.setSingleLine(true);
         back.setGravity(Gravity.CENTER);
         back.setPadding(dp(2), dp(4), dp(2), dp(4));
         back.setTextColor(Color.parseColor("#20305e"));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                dp(58), LinearLayout.LayoutParams.WRAP_CONTENT);
-        back.setLayoutParams(lp);
-        GradientDrawable pill = new GradientDrawable();
-        pill.setColor(Color.WHITE);
-        pill.setCornerRadius(dp(13));
-        pill.setStroke(dp(1), Color.parseColor("#c9d6f0"));
-        back.setBackground(pill);
-        tapActions.put(back, this::openApp);
+        back.setLayoutParams(new LinearLayout.LayoutParams(
+                dp(58), LinearLayout.LayoutParams.WRAP_CONTENT));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.WHITE);
+        bg.setCornerRadius(dp(13));
+        bg.setStroke(dp(1), Color.parseColor("#c9d6f0"));
+        back.setBackground(bg);
         return back;
     }
 
-    private View buildBall() {
+    private ImageView buildBall() {
         ImageView ball = new ImageView(this);
         ball.setImageDrawable(roundedBall(dp(116)));
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(58), dp(58));
         bp.topMargin = dp(6);
         ball.setLayoutParams(bp);
-        tapActions.put(ball, this::expand);
         return ball;
     }
 
-    private View buildHintCard() {
+    private LinearLayout buildHintCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
@@ -253,21 +256,15 @@ public class ParcelAccessibilityService extends AccessibilityService {
         LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(38), dp(38));
         ip.rightMargin = dp(8);
         card.addView(icon, ip);
-        tapActions.put(icon, this::onBallTap);
 
         TextView tv = new TextView(this);
         tv.setTextSize(12);
         tv.setLineSpacing(dp(2), 1f);
         tv.setText(highlight(HINT));
         card.addView(tv);
-
-        // 空白处点一下也当作"抓单号"，跟点鱼一样
-        tapActions.put(card, this::onBallTap);
-        tapActions.put(tv, this::onBallTap);
         return card;
     }
 
-    /** 把提示里的关键词染成橙色，跟菜鸟一样 */
     private CharSequence highlight(String text) {
         SpannableString ss = new SpannableString(text);
         int orange = Color.parseColor("#F5822B");
@@ -284,57 +281,23 @@ public class ParcelAccessibilityService extends AccessibilityService {
     /* ---------------- 点击分发 ---------------- */
 
     private void handleTap(float rawX, float rawY) {
-        View best = null;
-        int bestArea = Integer.MAX_VALUE;
-        for (View v : tapActions.keySet()) {
+        View[] targets = new View[]{pill, ballView, cardView};
+        for (View v : targets) {
+            if (v == null || v.getVisibility() != View.VISIBLE) continue;
             int[] loc = new int[2];
             v.getLocationOnScreen(loc);
             Rect r = new Rect(loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight());
-            if (r.contains((int) rawX, (int) rawY)) {
-                int area = v.getWidth() * v.getHeight();
-                if (area < bestArea) {
-                    bestArea = area;
-                    best = v;
-                }
+            if (!r.contains((int) rawX, (int) rawY)) continue;
+
+            if (v == pill) {
+                openApp();
+            } else if (v == ballView) {
+                setExpanded(true);
+            } else {
+                onBallTap();
             }
+            return;
         }
-        if (best != null) {
-            Runnable action = tapActions.get(best);
-            if (action != null) action.run();
-        }
-    }
-
-    private void expand() {
-        expanded = true;
-        render();
-        ui.removeCallbacks(collapseTask);
-        ui.postDelayed(collapseTask, 12000);
-    }
-
-    private void collapse() {
-        if (root == null || !expanded) return;
-        expanded = false;
-        render();
-    }
-
-    /**
-     * 原地收起：只把内容换成小球，窗口坐标一点不动。
-     * 这样手指和窗口的距离跟按下时完全一致，不会追手。
-     */
-    private void collapseInPlace() {
-        expanded = false;
-        rebuild();
-        applyLayout();
-    }
-
-    /** 别让悬浮窗跑出屏幕 */
-    private void clampPosition() {
-        int w = expanded ? dp(268) : dp(58);
-        int h = expanded ? dp(130) : dp(86);
-        int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - w);
-        int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - h);
-        params.x = Math.max(0, Math.min(params.x, maxX));
-        params.y = Math.max(0, Math.min(params.y, maxY));
     }
 
     private void openApp() {
@@ -424,7 +387,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
     /* ---------------- 结果卡片 ---------------- */
 
     private void showResultCard(final String no) {
-        removeCard();
+        removeResultCard();
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -462,7 +425,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
         addBg.setCornerRadius(dp(10));
         add.setBackground(addBg);
         add.setOnClickListener(v -> {
-            removeCard();
+            removeResultCard();
             MainActivity.PENDING_ADD = "{\"no\":\"" + no + "\",\"source\":\"" + esc(sourceApp()) + "\"}";
             openApp();
         });
@@ -473,7 +436,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
         cancel.setTextColor(Color.parseColor("#7c879b"));
         cancel.setGravity(Gravity.CENTER);
         cancel.setPadding(dp(18), dp(10), dp(18), dp(10));
-        cancel.setOnClickListener(v -> removeCard());
+        cancel.setOnClickListener(v -> removeResultCard());
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -497,19 +460,19 @@ public class ParcelAccessibilityService extends AccessibilityService {
 
         try {
             wm.addView(box, p);
-            cardResult = box;
+            resultCard = box;
         } catch (Exception e) {
             toast("弹卡片失败：" + e.getMessage());
         }
 
-        ui.postDelayed(this::removeCard, 15000);
+        ui.postDelayed(this::removeResultCard, 15000);
     }
 
-    private void removeCard() {
-        if (cardResult != null && cardResult.getParent() != null && wm != null) {
-            try { wm.removeView(cardResult); } catch (Exception ignored) {}
+    private void removeResultCard() {
+        if (resultCard != null && resultCard.getParent() != null && wm != null) {
+            try { wm.removeView(resultCard); } catch (Exception ignored) {}
         }
-        cardResult = null;
+        resultCard = null;
     }
 
     private static String esc(String s) {
@@ -527,9 +490,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
         }
     }
 
-    /* ---------------- 图标处理 ---------------- */
+    /* ---------------- 图标 ---------------- */
 
-    /** 方图 → 圆角 + 白边 + 深蓝描边 */
     private Drawable roundedBall(int sizePx) {
         Bitmap src = BitmapFactory.decodeResource(getResources(), R.drawable.ball);
         Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
