@@ -69,6 +69,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
     private int startX, startY;
     private float downX, downY;
     private long downTime;
+    private boolean dragging = false;
 
     /** 点哪个控件做什么 */
     private final Map<View, Runnable> tapActions = new LinkedHashMap<>();
@@ -115,7 +116,8 @@ public class ParcelAccessibilityService extends AccessibilityService {
     private void buildRoot() {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        // 左对齐：展开/收起时「返回软件」始终停在同一个位置
+        root.setGravity(Gravity.START);
 
         params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -137,8 +139,15 @@ public class ParcelAccessibilityService extends AccessibilityService {
                         downX = e.getRawX();
                         downY = e.getRawY();
                         downTime = System.currentTimeMillis();
+                        dragging = false;
                         return true;
                     case MotionEvent.ACTION_MOVE:
+                        // 一开始拖就把展开的提示收回去，只留小球
+                        if (!dragging) {
+                            dragging = Math.abs(e.getRawX() - downX) > dp(8)
+                                    || Math.abs(e.getRawY() - downY) > dp(8);
+                            if (dragging && expanded) collapse();
+                        }
                         params.x = startX + (int) (e.getRawX() - downX);
                         params.y = startY + (int) (e.getRawY() - downY);
                         if (root.getParent() != null) {
@@ -146,12 +155,10 @@ public class ParcelAccessibilityService extends AccessibilityService {
                         }
                         return true;
                     case MotionEvent.ACTION_UP:
-                        float dx = Math.abs(e.getRawX() - downX);
-                        float dy = Math.abs(e.getRawY() - downY);
-                        if (dx < dp(8) && dy < dp(8)
-                                && System.currentTimeMillis() - downTime < 400) {
+                        if (!dragging && System.currentTimeMillis() - downTime < 400) {
                             handleTap(e.getRawX(), e.getRawY());
                         }
+                        dragging = false;
                         return true;
                 }
                 return false;

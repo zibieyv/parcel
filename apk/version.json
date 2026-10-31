@@ -1,6 +1,6 @@
 {
-  "versionCode": 9,
-  "versionName": "0.9",
-  "url": "/apk/parcel-0.9.apk",
-  "notes": "可展开的悬浮窗"
+  "versionCode": 10,
+  "versionName": "0.10",
+  "url": "/apk/parcel-0.10.apk",
+  "notes": "拖动自动收起、返回按钮左对齐"
 }
