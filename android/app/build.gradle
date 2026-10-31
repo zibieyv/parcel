@@ -10,8 +10,12 @@ android {
         applicationId 'com.zibieyv.parcel'
         minSdk 26
         targetSdk 34
-        versionCode 4
-        versionName '0.4'
+        versionCode 5
+        versionName '0.5'
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     // 固定签名：以后升级可以直接覆盖安装，不用先卸载

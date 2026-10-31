@@ -41,6 +41,14 @@ h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.5px}
 .icon-btn{width:38px;height:38px;border-radius:12px;background:var(--card);display:grid;place-items:center;font-size:17px}
 .filters{display:flex;gap:8px;overflow-x:auto;padding:12px 0 2px;scrollbar-width:none}
 .filters::-webkit-scrollbar{display:none}
+.updatebar{
+  display:none;align-items:center;justify-content:space-between;gap:12px;
+  margin:0 16px 0;padding:10px 14px;border-radius:12px;background:#1b2740;border:1px solid #2f4d85;
+  font-size:13px;color:#a8c4ff;
+}
+.updatebar button{
+  flex:0 0 auto;padding:8px 14px;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;
+}
 .chip{
   flex:0 0 auto;padding:7px 14px;border-radius:999px;background:var(--card);
   border:1px solid var(--line);font-size:13px;color:var(--dim);white-space:nowrap;
@@ -144,6 +152,8 @@ main{padding:14px 16px 0}
   <div class="filters" id="filters"></div>
 </header>
 
+<div class="updatebar" id="updateBar"></div>
+
 <main id="list"></main>
 
 <button class="fab" id="addBtn">＋ 添加包裹</button>
@@ -200,6 +210,7 @@ main{padding:14px 16px 0}
       <div class="field"><label>取件码自动抓取（仅 App 内可用）</label></div>
       <button class="ghost" id="notifBtn">开启「通知读取」权限</button>
       <button class="ghost" id="smsBtn">检查短信权限</button>
+      <button class="ghost" id="checkUpdateBtn">检查更新</button>
       <p id="notifState" style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:10px"></p>
     </div>
 
@@ -632,6 +643,31 @@ main{padding:14px 16px 0}
     e.target.value = '';
   };
 
+  /* ---------- 检查更新（只在 App 里生效） ---------- */
+  async function checkUpdate(silent) {
+    const cur = (window.Native && window.Native.versionCode) ? window.Native.versionCode() : 0;
+    if (!cur) { if (!silent) toast('网页版不用更新，刷新即可'); return; }
+    try {
+      const r = await fetch('/apk/version.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) { if (!silent) toast('暂时拿不到版本信息'); return; }
+      const j = await r.json();
+      if (j.versionCode > cur) {
+        const bar = $('updateBar');
+        bar.innerHTML = `<span>发现新版本 ${esc(j.versionName)}</span><button id="doUpdate">立即更新</button>`;
+        bar.style.display = 'flex';
+        $('doUpdate').onclick = () => {
+          window.Native.installUpdate(j.url);
+          toast('开始下载，完成后会弹出安装');
+        };
+        if (!silent) toast(`有新版本 ${j.versionName}`);
+      } else if (!silent) {
+        toast('已经是最新版（v' + window.Native.version() + '）');
+      }
+    } catch (e) {
+      if (!silent) toast('检查更新失败');
+    }
+  }
+
   /* ---------- 启动 ---------- */
   refreshFilters();
   render();
@@ -640,6 +676,7 @@ main{padding:14px 16px 0}
   } else {
     setTimeout(autoRefresh, 600);
   }
+  setTimeout(() => checkUpdate(true), 1500);
 
   /* ---------- 原生注入的取件码 ---------- */
   window.__onPickupCode = function (code, tracking, source) {
@@ -675,6 +712,7 @@ main{padding:14px 16px 0}
     $('appBox').style.display = 'block';
     $('notifBtn').onclick = () => window.Native.openNotificationSettings();
     $('smsBtn').onclick = () => window.Native.openAppSettings();
+    $('checkUpdateBtn').onclick = () => checkUpdate(false);
     try {
       const on = window.Native.notificationAccessEnabled();
       $('notifState').textContent = on
