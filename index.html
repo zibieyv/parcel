@@ -405,15 +405,14 @@ main{padding:14px 16px 0}
     return `${Math.floor(diff/86400)} 天前`;
   }
 
-  /* ---------- 筛选：第一行分组，第二行状态（带计数） ---------- */
-  let filter = { group: 'all', status: 'all' };
+  /* ---------- 筛选：第一行分组（可多选），第二行状态（带计数） ---------- */
+  let filter = { groups: [], status: 'all' };
   let lpFired = false;
 
-  /** 当前分组范围内的包裹（不含归档过滤） */
+  /** 当前分组范围内的包裹（groups 为空 = 全部） */
   function groupScope() {
-    if (filter.group === 'none') return db.items.filter((i) => !i.group);
-    if (filter.group !== 'all') return db.items.filter((i) => i.group === filter.group);
-    return db.items;
+    if (!filter.groups.length) return db.items;
+    return db.items.filter((i) => filter.groups.includes(i.group || 'none'));
   }
 
   function statusMatched(i, status) {
@@ -425,11 +424,13 @@ main{padding:14px 16px 0}
   }
 
   function refreshFilters() {
-    // 第一行：分组
-    const groups = [{ key: 'all', name: '全部' }, { key: 'none', name: '未分组' }]
+    // 第一行：分组（可多选；「全部」= 清空选择）
+    const groups = [{ key: 'none', name: '未分组' }]
       .concat(db.groups.map((g) => ({ key: g, name: g })));
-    let groupHtml = groups
-      .map((g) => `<button class="chip ${filter.group===g.key?'on':''}" data-g="${esc(g.key)}" data-group="1">${esc(g.name)}</button>`)
+    const allOn = filter.groups.length === 0;
+    let groupHtml = `<button class="chip ${allOn?'on':''}" data-g="__all" data-group="1">全部</button>`;
+    groupHtml += groups
+      .map((g) => `<button class="chip ${filter.groups.includes(g.key)?'on':''}" data-g="${esc(g.key)}" data-group="1">${esc(g.name)}</button>`)
       .join('');
     groupHtml += `<button class="chip" data-g="__new" data-group="1" style="color:#9db8ff">＋</button>`;
 
@@ -457,8 +458,15 @@ main{padding:14px 16px 0}
     $('groupFilters').onclick = (e) => {
       const b = e.target.closest('[data-g]');
       if (!b || lpFired) { lpFired = false; return; }
-      if (b.dataset.g === '__new') { openGroupSheet(null); return; }
-      filter.group = b.dataset.g;
+      const key = b.dataset.g;
+      if (key === '__new') { openGroupSheet(null); return; }
+      if (key === '__all') {
+        filter.groups = [];
+      } else {
+        const i = filter.groups.indexOf(key);
+        if (i >= 0) filter.groups.splice(i, 1);
+        else filter.groups.push(key);
+      }
       refreshFilters();
       render();
     };
@@ -476,7 +484,7 @@ main{padding:14px 16px 0}
     $('groupFilters').ontouchstart = (e) => {
       const b = e.target.closest('[data-g]');
       const key = b && b.dataset.g;
-      if (!key || key === 'all' || key === 'none' || key === '__new') return;
+      if (!key || key === '__all' || key === 'none' || key === '__new') return;
       clearTimeout(lpTimer);
       lpTimer = setTimeout(() => {
         lpFired = true;
@@ -903,6 +911,8 @@ main{padding:14px 16px 0}
       db.items.forEach((it) => { if (it.group === groupEditing) it.group = name; });
       // 改的正好是家庭码绑定的分组 → 绑定名跟着改，不然同步会断
       if (db.settings.roomGroup === groupEditing) db.settings.roomGroup = name;
+      const gi = filter.groups.indexOf(groupEditing);
+      if (gi >= 0) filter.groups[gi] = name;
     } else {
       db.groups.push(name);
     }
@@ -920,6 +930,7 @@ main{padding:14px 16px 0}
     if (!confirm(`删除分组「${groupEditing}」？里面的包裹会变成未分组`)) return;
     db.groups = db.groups.filter((g) => g !== groupEditing);
     db.items.forEach((it) => { if (it.group === groupEditing) it.group = ''; });
+    filter.groups = filter.groups.filter((g) => g !== groupEditing);
     if (db.settings.roomGroup === groupEditing) {
       db.settings.roomGroup = '';
       db.settings.room = '';
