@@ -1,0 +1,9 @@
+{
+  "name": "parcel-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "物流看板的境外代查接口（Vercel Serverless）",
+  "engines": {
+    "node": ">=18"
+  }
+}

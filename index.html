@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>物流查询 · 测试页</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px 16px 40px; min-height: 100vh;
+    background: #0f1115; color: #e6e8eb;
+    font: 16px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 16px; font-weight: 600; letter-spacing: .5px; }
+  .card { background: #171a21; border: 1px solid #242a35; border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  label { display: block; font-size: 12px; color: #8b93a1; margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #2a3140;
+    background: #0f1218; color: #e6e8eb; font-size: 16px; outline: none;
+  }
+  input:focus { border-color: #3d7eff; }
+  .row { display: flex; gap: 10px; margin-top: 12px; }
+  button {
+    flex: 1; padding: 13px; border: 0; border-radius: 10px; background: #3d7eff;
+    color: #fff; font-size: 16px; font-weight: 600;
+  }
+  button:disabled { opacity: .5; }
+  .status { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; background: #24304a; color: #9db8ff; }
+  .status.delivered { background: #16351f; color: #6ee7a0; }
+  .status.delivering, .status.pickup { background: #3a2a10; color: #fbbf24; }
+  .meta { font-size: 13px; color: #8b93a1; margin-top: 6px; }
+  .event { padding: 10px 0; border-top: 1px solid #222833; font-size: 14px; }
+  .event:first-of-type { border-top: 0; }
+  .event .t { font-size: 12px; color: #79818f; }
+  .event .w { font-size: 12px; color: #616a78; }
+  .err { color: #ff8a8a; font-size: 14px; white-space: pre-wrap; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+  <h1>物流查询 · 测试页</h1>
+
+  <div class="card">
+    <label>接口地址</label>
+    <input id="base" value="" placeholder="https://parcel.zibieyv.com">
+    <div class="grid" style="margin-top:10px">
+      <div>
+        <label>APP_TOKEN（可留空）</label>
+        <input id="token" placeholder="与 Vercel 环境变量一致">
+      </div>
+      <div>
+        <label>单号</label>
+        <input id="no" placeholder="EB123456789TW">
+      </div>
+    </div>
+    <div class="row">
+      <button id="go">查询</button>
+    </div>
+  </div>
+
+  <div id="out"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const base = $('base'), tokenEl = $('token'), noEl = $('no'), out = $('out'), btn = $('go');
+
+base.value = localStorage.getItem('parcel.base') || location.origin;
+tokenEl.value = localStorage.getItem('parcel.token') || '';
+noEl.value = localStorage.getItem('parcel.no') || '';
+
+function persist() {
+  localStorage.setItem('parcel.base', base.value.trim());
+  localStorage.setItem('parcel.token', tokenEl.value.trim());
+  localStorage.setItem('parcel.no', noEl.value.trim().toUpperCase());
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+btn.onclick = async () => {
+  persist();
+  const no = noEl.value.trim().toUpperCase();
+  if (!no) return;
+  btn.disabled = true;
+  out.innerHTML = '<div class="card meta">查询中…</div>';
+  try {
+    const url = new URL('/api/track', base.value.trim() || location.origin);
+    url.searchParams.set('no', no);
+    if (tokenEl.value.trim()) url.searchParams.set('token', tokenEl.value.trim());
+    const r = await fetch(url, { headers: { accept: 'application/json' } });
+    const j = await r.json();
+    render(j, r.status);
+  } catch (e) {
+    out.innerHTML = `<div class="card err">请求失败：${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+function render(j, httpStatus) {
+  if (!j.ok) {
+    out.innerHTML = `<div class="card err">HTTP ${httpStatus}\n${esc(j.error || '未知错误')}</div>`;
+    return;
+  }
+  const events = (j.events || []).map((e) => `
+    <div class="event">
+      <div class="t">${esc(e.time || '')}</div>
+      <div>${esc(e.text)}</div>
+      ${e.where ? `<div class="w">${esc(e.where)}</div>` : ''}
+    </div>`).join('');
+  out.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <strong style="font-size:15px">${esc(j.no)}</strong>
+        <span class="status ${esc(j.status)}">${esc(j.statusText || j.status)}</span>
+      </div>
+      <div class="meta">${esc(j.carrier || '')} · ${esc(j.latest || '')}</div>
+      <div class="meta">更新：${esc(j.updatedAt || '')}</div>
+    </div>
+    <div class="card">${events || '<div class="meta">暂无轨迹</div>'}</div>`;
+}
+</script>
+</body>
+</html>
