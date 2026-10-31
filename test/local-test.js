@@ -97,6 +97,56 @@ function mockRes() {
   delete process.env.APP_TOKEN;
   console.log('✓ APP_TOKEN 校验');
 
+  // 6. 字符串状态（v2.2 真实返回长这样）
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({
+      code: 0,
+      data: {
+        accepted: [{
+          number: 'EB123456789TW',
+          track_info: {
+            latest_status: { status: 'NotFound' },
+            latest_event: null,
+            tracking: { providers: [] },
+          },
+        }],
+        rejected: [],
+      },
+    }),
+  });
+  res = mockRes();
+  await handler({ method: 'GET', headers: {}, query: { no: 'EB123456789TW' } }, res);
+  let nf = res.json();
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(nf.status, 'notfound');
+  console.log('✓ 字符串状态 NotFound → notfound');
+
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({
+      code: 0,
+      data: {
+        accepted: [{
+          number: 'EB123456789TW',
+          track_info: {
+            latest_status: { status: 'Delivered', sub_status_descr: 'Delivered' },
+            latest_event: { time_iso: '2026-10-30T10:00:00Z', description: '已签收' },
+            tracking: { providers: [{ provider: { name: 'Chunghwa Post' }, events: [] }] },
+          },
+        }],
+      },
+    }),
+  });
+  res = mockRes();
+  await handler({ method: 'GET', headers: {}, query: { no: 'EB123456789TW' } }, res);
+  const dl = res.json();
+  assert.strictEqual(dl.status, 'delivered');
+  assert.strictEqual(dl.code, 50);
+  console.log('✓ 字符串状态 Delivered → delivered');
+
   console.log('\n全部通过');
 })().catch((e) => {
   console.error('✗ 失败：', e.message);

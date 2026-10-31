@@ -12,6 +12,7 @@
 
 const TRACK17_BASE = process.env.TRACK17_BASE || 'https://api.17track.net/track/v2.2';
 
+// 17TRACK v2.2 的 status 有时是数字、有时是字符串枚举，两种都要认
 const STATUS_TEXT = {
   0: '查询不到',
   10: '已揽收',
@@ -24,13 +25,35 @@ const STATUS_TEXT = {
   70: '超时未更新',
 };
 
-function statusOf(code) {
-  if (code >= 50) return 'delivered';
-  if (code >= 40) return 'delivering';
-  if (code >= 30) return 'pickup';
-  if (code >= 10) return 'in_transit';
-  if (code === 0) return 'notfound';
-  return 'pending';
+const STRING_STATUS = {
+  NotFound: [0, 'notfound'],
+  InfoReceived: [10, 'in_transit'],
+  InTransit: [20, 'in_transit'],
+  AvailableForPickup: [30, 'pickup'],
+  Customs: [35, 'in_transit'],
+  OutForDelivery: [40, 'delivering'],
+  Delivered: [50, 'delivered'],
+  Exception: [60, 'exception'],
+  Expired: [70, 'exception'],
+};
+
+function statusOf(raw) {
+  let code;
+  if (typeof raw === 'string') {
+    const hit = STRING_STATUS[raw];
+    if (hit) return { code: hit[0], key: hit[1] };
+    code = Number(raw);
+  } else {
+    code = Number(raw || 0);
+  }
+  if (!Number.isFinite(code)) return { code: 0, key: 'notfound' };
+  if (code >= 60) return { code, key: 'exception' };
+  if (code >= 50) return { code, key: 'delivered' };
+  if (code >= 40) return { code, key: 'delivering' };
+  if (code >= 30) return { code, key: 'pickup' };
+  if (code >= 10) return { code, key: 'in_transit' };
+  if (code === 0) return { code, key: 'notfound' };
+  return { code, key: 'pending' };
 }
 
 function normalizeNo(raw) {
@@ -69,11 +92,11 @@ function pickInfo(entry) {
     .filter((e) => e.text)
     .sort((a, b) => String(b.time).localeCompare(String(a.time)));
 
-  const code = info.latest_status?.status ?? 0;
+  const st = statusOf(info.latest_status?.status);
   return {
-    code,
-    status: statusOf(code),
-    statusText: info.latest_status?.sub_status_descr || STATUS_TEXT[code] || '',
+    code: st.code,
+    status: st.key,
+    statusText: info.latest_status?.sub_status_descr || STATUS_TEXT[st.code] || '',
     latest: info.latest_event?.description || events[0]?.text || '',
     latestTime: info.latest_event?.time_iso || events[0]?.time || '',
     carrier: info.tracking?.providers?.[0]?.provider?.name || '',
