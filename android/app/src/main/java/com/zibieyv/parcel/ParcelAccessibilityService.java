@@ -185,6 +185,7 @@ public class ParcelAccessibilityService extends AccessibilityService {
 
     private void render() {
         rebuild();
+        clampPosition();
         applyLayout();
     }
 
@@ -323,14 +324,23 @@ public class ParcelAccessibilityService extends AccessibilityService {
     }
 
     /**
-     * 拖动开始时把展开态收成小球，并让小球直接落在手指下方。
-     * 只重建 + 提交一次布局，避免"卡一下再跳到手指"。
+     * 拖动开始时把展开态收成小球，并让**小球本身**正好落在手指底下。
+     * 之前用固定 29dp 当半高，忽略了上方「返回软件」的高度，所以会偏。
      */
     private void collapseUnderFinger(float rawX, float rawY) {
         expanded = false;
         rebuild();
-        params.x = (int) (rawX - dp(29));
-        params.y = (int) (rawY - dp(29));
+
+        int pillH = 0;
+        if (root.getChildCount() > 0) {
+            View pill = root.getChildAt(0);
+            pillH = pill.getMeasuredHeight() > 0 ? pill.getMeasuredHeight() : dp(24);
+        }
+        int ballTop = pillH + dp(6);      // 小球在容器内的 y 偏移
+        int ballSize = dp(58);
+
+        params.x = (int) (rawX - ballSize / 2f);
+        params.y = (int) (rawY - (ballTop + ballSize / 2f));
         clampPosition();
         applyLayout();
     }
