@@ -65,6 +65,11 @@ public class ScreenService extends Service {
 
     private WindowManager wm;
     private LinearLayout ballBox;
+    private ImageView ballView;
+    private ImageView cardIcon;
+    private LinearLayout cardView;
+    private boolean expanded = true;
+    private int cardWidthPx = 0;
     private WindowManager.LayoutParams ballParams;
     private View resultCard;
     private boolean ballVisible = false;
@@ -263,14 +268,17 @@ public class ScreenService extends Service {
         pillBg.setStroke(dp(1), Color.parseColor("#c9d6f0"));
         pill.setBackground(pillBg);
 
-        ImageView ball = new ImageView(this);
-        ball.setImageDrawable(roundedBall(dp(116)));
+        ballView = new ImageView(this);
+        ballView.setImageDrawable(roundedBall(dp(116)));
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(58), dp(58));
         bp.topMargin = dp(6);
-        ball.setLayoutParams(bp);
+        ballView.setLayoutParams(bp);
+
+        cardView = buildHintCard();
 
         ballBox.addView(pill);
-        ballBox.addView(ball);
+        ballBox.addView(ballView);
+        ballBox.addView(cardView);
 
         ballParams = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -282,7 +290,6 @@ public class ScreenService extends Service {
         ballParams.x = dp(2);
         ballParams.y = (int) (getResources().getDisplayMetrics().heightPixels * 0.55);
 
-        final int pillH = dp(24);
         ballBox.setOnTouchListener((v, e) -> {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
@@ -298,6 +305,8 @@ public class ScreenService extends Service {
                         dragging = Math.abs(e.getRawX() - downX) > dp(8)
                                 || Math.abs(e.getRawY() - downY) > dp(8);
                     }
+                    // 展开时锁住，先点一下收起成球才能拖
+                    if (expanded) return true;
                     ballParams.x = startX + (int) (e.getRawX() - downX);
                     ballParams.y = startY + (int) (e.getRawY() - downY);
                     clamp();
@@ -305,9 +314,7 @@ public class ScreenService extends Service {
                     return true;
                 case MotionEvent.ACTION_UP:
                     if (!dragging && System.currentTimeMillis() - downTime < 400) {
-                        float localY = e.getRawY() - ballParams.y;
-                        if (localY <= pillH + dp(2)) openApp();
-                        else captureAndRecognize();
+                        handleTap(e.getRawX(), e.getRawY());
                     }
                     dragging = false;
                     return true;
@@ -321,7 +328,95 @@ public class ScreenService extends Service {
         } catch (Exception e) {
             toast("悬浮球创建失败：" + e.getMessage());
             ballBox = null;
+            return;
         }
+        setExpanded(true);
+    }
+
+    private LinearLayout buildHintCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(10), dp(10), dp(10), dp(10));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.WHITE);
+        bg.setCornerRadius(dp(18));
+        bg.setStroke(dp(1), Color.parseColor("#d5dff2"));
+        card.setBackground(bg);
+
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        cardWidthPx = Math.min(dp(360), screenW - dp(8));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                cardWidthPx, LinearLayout.LayoutParams.WRAP_CONTENT);
+        clp.topMargin = dp(6);
+        card.setLayoutParams(clp);
+
+        cardIcon = new ImageView(this);
+        cardIcon.setImageDrawable(roundedBall(dp(76)));
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(38), dp(38));
+        ip.rightMargin = dp(8);
+        card.addView(cardIcon, ip);
+
+        TextView tv = new TextView(this);
+        tv.setTextSize(10.5f);
+        tv.setLineSpacing(dp(3), 1f);
+        tv.setText(highlight(
+                "找到待收货包裹，在有快递单号的页面，点击大肥鱼添加包裹，点击此处收起提示以拖动肥鱼"));
+        card.addView(tv);
+        return card;
+    }
+
+    private CharSequence highlight(String text) {
+        android.text.SpannableString ss = new android.text.SpannableString(text);
+        int orange = Color.parseColor("#F5822B");
+        for (String kw : new String[]{"待收货包裹", "快递单号", "大肥鱼", "收起提示", "拖动肥鱼"}) {
+            int from = 0;
+            while (true) {
+                int i = text.indexOf(kw, from);
+                if (i < 0) break;
+                ss.setSpan(new android.text.style.ForegroundColorSpan(orange), i, i + kw.length(),
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                from = i + kw.length();
+            }
+        }
+        return ss;
+    }
+
+    private void setExpanded(boolean value) {
+        expanded = value;
+        if (ballView != null) ballView.setVisibility(value ? View.GONE : View.VISIBLE);
+        if (cardView != null) cardView.setVisibility(value ? View.VISIBLE : View.GONE);
+        clamp();
+        if (ballBox != null && ballBox.getParent() != null) {
+            try { wm.updateViewLayout(ballBox, ballParams); } catch (Exception ignored) {}
+        }
+        ui.removeCallbacks(collapseTask);
+        if (value) ui.postDelayed(collapseTask, 12000);
+    }
+
+    private final Runnable collapseTask = () -> setExpanded(false);
+
+    private void handleTap(float rawX, float rawY) {
+        View[] targets = new View[]{ballView, cardIcon, cardView};
+        for (View v : targets) {
+            if (v == null || !v.isShown()) continue;
+            int[] loc = new int[2];
+            v.getLocationOnScreen(loc);
+            Rect r = new Rect(loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight());
+            if (!r.contains((int) rawX, (int) rawY)) continue;
+
+            if (v == ballView) {
+                setExpanded(true);
+            } else if (v == cardIcon) {
+                captureAndRecognize();
+            } else {
+                setExpanded(false);
+            }
+            return;
+        }
+        // 没命中球/卡片，落在顶部那条「返回软件」上
+        float localY = rawY - ballParams.y;
+        if (localY <= dp(28)) openApp();
     }
 
     private void hideBall() {
@@ -329,12 +424,17 @@ public class ScreenService extends Service {
             try { wm.removeView(ballBox); } catch (Exception ignored) {}
         }
         ballBox = null;
+        ballView = null;
+        cardView = null;
+        cardIcon = null;
         ballVisible = false;
     }
 
     private void clamp() {
-        int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - dp(58));
-        int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - dp(86));
+        int w = expanded ? (cardWidthPx > 0 ? cardWidthPx : dp(360)) : dp(58);
+        int h = expanded ? dp(140) : dp(86);
+        int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - w);
+        int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - h);
         ballParams.x = Math.max(0, Math.min(ballParams.x, maxX));
         ballParams.y = Math.max(0, Math.min(ballParams.y, maxY));
     }

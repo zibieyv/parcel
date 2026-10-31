@@ -1,6 +1,6 @@
 {
-  "versionCode": 21,
-  "versionName": "0.21",
-  "url": "/apk/parcel-0.21.apk?v=21",
-  "notes": "截屏 OCR 抓单号，不再依赖无障碍"
+  "versionCode": 22,
+  "versionName": "0.22",
+  "url": "/apk/parcel-0.22.apk?v=22",
+  "notes": "恢复展开提示卡片"
 }
