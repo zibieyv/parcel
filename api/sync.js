@@ -18,8 +18,9 @@ const ROOM_RE = /^[A-Z0-9]{4,12}$/;
 const KEY_PREFIX = 'parcel:room:';
 
 function redisBase() {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // Upstash 集成给的是 UPSTASH_*，Vercel KV 集成给的是 KV_REST_API_*，两种都认
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   if (!url || !token) throw new Error('未配置 Upstash，请先在 Vercel 里加 UPSTASH_REDIS_REST_URL / TOKEN');
   return { url: url.replace(/\/$/, ''), token };
 }
