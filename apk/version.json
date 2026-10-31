@@ -1,6 +1,6 @@
 {
-  "versionCode": 19,
-  "versionName": "0.19",
-  "url": "/apk/parcel-0.19.apk",
-  "notes": "常驻通知保活 + 悬浮球开关"
+  "versionCode": 20,
+  "versionName": "0.20",
+  "url": "/apk/parcel-0.20.apk",
+  "notes": "悬浮球开关挪到首页，通知栏只留状态"
 }

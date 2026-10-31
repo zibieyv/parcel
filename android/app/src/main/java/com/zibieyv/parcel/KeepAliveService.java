@@ -100,13 +100,11 @@ public class KeepAliveService extends Service {
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
         b.setContentTitle("包裹")
-                .setContentText(ballOn ? "悬浮球已显示，点通知栏按钮可隐藏" : "悬浮球已隐藏")
+                .setContentText(ballOn ? "悬浮球显示中 · 开关在 App 首页右上角" : "悬浮球已隐藏 · 开关在 App 首页右上角")
                 .setSmallIcon(R.drawable.ball)
                 .setOngoing(true)
                 .setShowWhen(false)
-                .setContentIntent(openPi)
-                .addAction(new Notification.Action.Builder(null,
-                        ballOn ? "隐藏悬浮球" : "显示悬浮球", togglePi).build());
+                .setContentIntent(openPi);
         return b.build();
     }
 
