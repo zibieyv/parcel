@@ -49,6 +49,15 @@ h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.5px}
 .updatebar button{
   flex:0 0 auto;padding:8px 14px;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;
 }
+.warnbar{
+  display:none;align-items:center;justify-content:space-between;gap:12px;
+  margin:0 16px;padding:10px 14px;border-radius:12px;
+  background:#3a2a10;border:1px solid #6b4d16;font-size:13px;color:#fbbf24;
+}
+.warnbar button{
+  flex:0 0 auto;padding:8px 14px;border-radius:9px;background:#f5b545;color:#2a1d05;
+  font-size:13px;font-weight:600;
+}
 .chip{
   flex:0 0 auto;padding:7px 14px;border-radius:999px;background:var(--card);
   border:1px solid var(--line);font-size:13px;color:var(--dim);white-space:nowrap;
@@ -153,6 +162,7 @@ main{padding:14px 16px 0}
 </header>
 
 <div class="updatebar" id="updateBar"></div>
+<div class="warnbar" id="accBar"></div>
 
 <main id="list"></main>
 
@@ -836,6 +846,22 @@ main{padding:14px 16px 0}
     toast('抓到单号 ' + no + '，确认后保存');
   };
 
+  /* ---------- 读屏权限掉了要提醒 ---------- */
+  function checkAccBar() {
+    if (!window.Native || !window.Native.accessibilityEnabled) return;
+    let on = true;
+    try { on = window.Native.accessibilityEnabled(); } catch (e) { return; }
+    const bar = $('accBar');
+    if (on) {
+      if (bar.innerHTML) { bar.innerHTML = ''; bar.style.display = 'none'; }
+      return;
+    }
+    if (bar.innerHTML) return; // 已经在提示了，别反复重建
+    bar.innerHTML = '<span>读屏权限被系统关掉了，悬浮球已经失效</span><button id="accFix">去开启</button>';
+    bar.style.display = 'flex';
+    $('accFix').onclick = () => window.Native.openAccessibilitySettings();
+  }
+
   /* ---------- 启动 ---------- */
   refreshFilters();
   render();
@@ -846,6 +872,15 @@ main{padding:14px 16px 0}
   }
   setTimeout(() => checkUpdate(true), 1500);
   setTimeout(() => window.__checkPendingAdd && window.__checkPendingAdd(), 1200);
+
+  // 回到前台就查一次，平时每 4 秒查一次（只是个本地调用，不费电不费流量）
+  setTimeout(checkAccBar, 2000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkAccBar();
+  });
+  setInterval(() => {
+    if (document.visibilityState === 'visible') checkAccBar();
+  }, 4000);
 
   /* ---------- 原生注入的取件码 ---------- */
   window.__onPickupCode = function (code, tracking, source) {
