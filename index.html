@@ -86,8 +86,9 @@ main{padding:14px 16px 0}
 .card .top{display:flex;align-items:flex-start;gap:10px}
 .pf{
   flex:0 0 auto;font-size:11px;padding:3px 8px;border-radius:7px;background:#232a36;
-  color:#b9c2d0;margin-top:2px;
+  color:#b9c2d0;margin-top:2px;text-align:center;line-height:1.25;
 }
+.pf i{display:block;font-style:normal;font-size:11px}
 .title{flex:1;min-width:0}
 .title b{display:block;font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .title b .nt{font-weight:400;font-size:13px;color:var(--dim)}
@@ -500,7 +501,9 @@ main{padding:14px 16px 0}
     return `
       <div class="card ${cls}" data-id="${it.id}">
         <div class="top">
-          <span class="pf">${esc(PLATFORM_NAME[it.platform] || '其他')}</span>
+          <span class="pf">${it.platform === 'other'
+            ? '<i>默认</i><i>其他</i>'
+            : esc(PLATFORM_NAME[it.platform] || '默认')}</span>
           <div class="title">
             <b class="nm">${esc(it.name || it.no || '未命名')}</b>
             ${note ? `<div class="nt2">备注：${esc(note)}</div>` : ''}
