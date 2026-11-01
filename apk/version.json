@@ -1,6 +1,6 @@
 {
-  "versionCode": 26,
-  "versionName": "0.26",
-  "url": "/apk/parcel-0.26.apk?v=26",
-  "notes": "修复「返回软件」点不动"
+  "versionCode": 27,
+  "versionName": "0.27",
+  "url": "/apk/parcel-0.27.apk?v=27",
+  "notes": "截屏改为按需建屏，不再常驻发热"
 }
