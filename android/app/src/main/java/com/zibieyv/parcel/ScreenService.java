@@ -311,6 +311,15 @@ public class ScreenService extends Service {
         }
     }
 
+    /** 拆掉虚拟屏和读图器（悬浮球隐藏或服务销毁时调用） */
+    private void teardownCapture() {
+        try { if (captureDisplay != null) captureDisplay.release(); } catch (Exception ignored) {}
+        captureDisplay = null;
+        try { if (captureReader != null) captureReader.close(); } catch (Exception ignored) {}
+        captureReader = null;
+        captureStartNs = 0;
+    }
+
     private void recycle(Bitmap b) {
         try { if (b != null && !b.isRecycled()) b.recycle(); } catch (Exception ignored) {}
     }
@@ -480,25 +489,20 @@ public class ScreenService extends Service {
     private final Runnable collapseTask = () -> setExpanded(false);
 
     private void handleTap(float rawX, float rawY) {
-        View[] targets = new View[]{pillView, ballView, cardIcon, cardView};
-        for (View v : targets) {
-            if (v == null || !v.isShown()) continue;
-            int[] loc = new int[2];
-            v.getLocationOnScreen(loc);
-            Rect r = new Rect(loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight());
-            if (!r.contains((int) rawX, (int) rawY)) continue;
+        // 优先级：卡片里的鱼 → 球 → 卡片空白 → 返回软件
+        // 之前「返回软件」排在最前，某些机型坐标抖动时会抢走点鱼的手势
+        if (hit(cardIcon, rawX, rawY)) { captureAndRecognize(); return; }
+        if (hit(ballView, rawX, rawY)) { setExpanded(true); return; }
+        if (hit(cardView, rawX, rawY)) { setExpanded(false); return; }
+        if (hit(pillView, rawX, rawY)) { openApp(); }
+    }
 
-            if (v == pillView) {
-                openApp();
-            } else if (v == ballView) {
-                setExpanded(true);
-            } else if (v == cardIcon) {
-                captureAndRecognize();
-            } else {
-                setExpanded(false);
-            }
-            return;
-        }
+    private boolean hit(View v, float rawX, float rawY) {
+        if (v == null || !v.isShown()) return false;
+        int[] loc = new int[2];
+        v.getLocationOnScreen(loc);
+        Rect r = new Rect(loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight());
+        return r.contains((int) rawX, (int) rawY);
     }
 
     private void hideBall() {
