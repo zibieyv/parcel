@@ -1355,7 +1355,13 @@ main{padding:14px 16px 0}
     const j = pendingUpdate;
     if (!j) return;
     showUpdateProgress(0);
-    try { window.Native.installUpdate(j.url); } catch (e) { hideUpdateProgress(); toast('启动下载失败'); }
+    // 优先国内较快的镜像，失败自动回落到主站
+    const primary = j.mirror || j.url;
+    const backup = j.mirror ? j.url : '';
+    try {
+      if (backup) window.Native.installUpdate(primary, backup);
+      else window.Native.installUpdate(primary);
+    } catch (e) { hideUpdateProgress(); toast('启动下载失败'); }
   };
 
   $('upBaidu').onclick = () => {

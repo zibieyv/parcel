@@ -1,6 +1,7 @@
 {
-  "versionCode": 35,
-  "versionName": "0.35",
-  "url": "/apk/parcel-0.35.apk?v=35",
-  "notes": "截屏等新帧，修复部分手机识别失败"
+  "versionCode": 36,
+  "versionName": "0.36",
+  "url": "/apk/parcel-0.36.apk?v=36",
+  "mirror": "https://cdn.jsdelivr.net/gh/zibieyv/parcel@main/apk/parcel-0.36.apk",
+  "notes": "arm64 精简包，下载更快"
 }

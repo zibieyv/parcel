@@ -202,9 +202,27 @@ public class MainActivity extends Activity implements Bridge.Sink {
         });
     }
 
+    private String pendingFallbackUrl = null;
+
+    /** 建一个下载任务，返回 DownloadManager 的任务 id */
+    private long startDownload(String url) {
+        DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+        Uri uri = Uri.parse(url.startsWith("http") ? url : HOME + url);
+        DownloadManager.Request req = new DownloadManager.Request(uri);
+        req.setTitle("包裹 App 更新");
+        req.setDescription("正在下载新版本…");
+        req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+        req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "parcel-update.apk");
+        req.setMimeType("application/vnd.android.package-archive");
+        long id = dm.enqueue(req);
+        downloadingId = id;
+        return id;
+    }
+
     private void pollDownload(DownloadManager dm, long id, int tries) {
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (tries > 300) { sendUpdateProgress(-1); return; }
+            // 慢网下十几 MB 要好几分钟，给足 30 分钟
+            if (tries > 4500) { sendUpdateProgress(-1); return; }
             Cursor c = null;
             try {
                 c = dm.query(new DownloadManager.Query().setFilterById(id));
@@ -220,8 +238,20 @@ public class MainActivity extends Activity implements Bridge.Sink {
                         return;
                     }
                     if (status == DownloadManager.STATUS_FAILED) {
+                        // 断流时自动换备用源再试一次
+                        if (pendingFallbackUrl != null) {
+                            String fb = pendingFallbackUrl;
+                            pendingFallbackUrl = null;
+                            try {
+                                dm.remove(id);
+                                long newId = startDownload(fb);
+                                sendUpdateProgress(0);
+                                pollDownload(dm, newId, 0);
+                                return;
+                            } catch (Exception ignored) {}
+                        }
                         sendUpdateProgress(-1);
-                        toast("下载失败，请检查网络");
+                        toast("下载失败，请换网络或走百度网盘");
                         return;
                     }
                     if (total > 0) {
@@ -277,25 +307,28 @@ public class MainActivity extends Activity implements Bridge.Sink {
         /** 下载新版 APK 并拉起系统安装器 */
         @JavascriptInterface
         public void installUpdate(String url) {
+            installUpdate(url, null);
+        }
+
+        /** 带备用地址的版本：主源失败自动换镜像 */
+        @JavascriptInterface
+        public void installUpdate(String url, String fallbackUrl) {
             if (url == null || url.isEmpty()) return;
+            if (fallbackUrl != null && !fallbackUrl.isEmpty()) {
+                pendingFallbackUrl = fallbackUrl.startsWith("http") ? fallbackUrl : HOME + fallbackUrl;
+            } else {
+                pendingFallbackUrl = null;
+            }
             runOnUiThread(() -> {
                 try {
                     DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
                     if (dm == null) return;
-
-                    Uri uri = Uri.parse(url.startsWith("http") ? url : HOME + url);
-                    DownloadManager.Request req = new DownloadManager.Request(uri);
-                    req.setTitle("包裹 App 更新");
-                    req.setDescription("正在下载新版本…");
-                    req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                    req.setDestinationInExternalFilesDir(MainActivity.this,
-                            Environment.DIRECTORY_DOWNLOADS, "parcel-update.apk");
-                    req.setMimeType("application/vnd.android.package-archive");
-                    downloadingId = dm.enqueue(req);
+                    long id = startDownload(url);
                     toast("开始下载，完成后会自动弹出安装");
-                    pollDownload(dm, downloadingId, 0);
+                    pollDownload(dm, id, 0);
                 } catch (Exception e) {
                     toast("下载失败：" + e.getMessage());
+                    sendUpdateProgress(-1);
                 }
             });
         }
