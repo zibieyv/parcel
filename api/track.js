@@ -174,7 +174,7 @@ async function ensureKdCookie() {
   return kdCookie;
 }
 
-async function queryKuaidi100(no, type) {
+async function queryKuaidi100(no, type, phone) {
   const temp = '0.' + String(no).length;
   const url = `https://www.kuaidi100.com/query?type=${encodeURIComponent(type)}&postid=${encodeURIComponent(no)}&temp=${temp}&phone=`;
   const cookie = await ensureKdCookie();
@@ -274,6 +274,7 @@ module.exports = async function handler(req, res) {
 
     // 指定了承运商就只试那一个，否则按候选依次试
     const forced = normalizeNo(req.query && req.query.carrier).toLowerCase();
+    const phoneTail = String((req.query && req.query.phone) || '').replace(/\D/g, '').slice(0, 4);
     const candidates = forced ? [forced] : carrierCandidates(no);
 
     let info = null;
@@ -323,7 +324,7 @@ module.exports = async function handler(req, res) {
       const tryTypes = types.length ? types : ['yunda', 'zhongtong', 'yuantong', 'shentong', 'youzhengguonei'];
       for (const t of tryTypes.slice(0, 5)) {
         try {
-          const kd = await queryKuaidi100(no, t);
+          const kd = await queryKuaidi100(no, t, phoneTail);
           debug.push({ kd100: t, hit: !!(kd && kd.events.length) });
           if (kd && kd.events.length) { info = kd; break; }
         } catch (e) {
