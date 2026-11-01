@@ -167,15 +167,17 @@ module.exports = async function handler(req, res) {
 
     let info = null;
     let lastReason = '暂无轨迹';
+    const debug = [];
 
     // 先试无承运商（国际单号多半能自动识别）
     const tries = [null, ...candidates];
     for (const carrier of tries) {
+      let regErr = '';
       try {
         const payload = carrier ? [{ number: no, carrier }] : [{ number: no }];
         await call17track('/register', payload, token);
       } catch (e) {
-        // 已注册过也算正常，继续查
+        regErr = String((e && e.message) || e).slice(0, 120);
       }
 
       let data;
@@ -198,10 +200,11 @@ module.exports = async function handler(req, res) {
 
       const rej = rejected.find((r) => normalizeNo(r.number) === no);
       if (rej && rej.reason) lastReason = String(rej.reason);
+      debug.push({ carrier: carrier || 'auto', regErr, accepted: accepted.length, rejected: rejected.length, reason: rej && rej.reason, code: got ? got.code : null });
     }
 
     if (!info) {
-      return send(404, { ok: false, no, error: lastReason });
+      return send(404, { ok: false, no, error: lastReason, debug });
     }
 
     return send(200, {
