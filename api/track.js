@@ -158,6 +158,11 @@ async function queryKuaidi100(no, type) {
   try { json = JSON.parse(text); } catch { return null; }
   if (json.status !== '200' || !Array.isArray(json.data) || !json.data.length) return null;
 
+  // 快递100 的 type 只是提示，它可能自动匹配到别的承运商，
+  // 这时轨迹属于别的包裹，必须丢掉
+  const com = String(json.com || '').toLowerCase();
+  if (com && com !== String(type).toLowerCase()) return null;
+
   const st = KD100_STATE[Number(json.state)] || [20, 'in_transit'];
   const events = json.data.map((e) => ({
     time: e.ftime || e.time || '',
@@ -283,6 +288,7 @@ module.exports = async function handler(req, res) {
       for (const t of tryTypes.slice(0, 5)) {
         try {
           const kd = await queryKuaidi100(no, t);
+          debug.push({ kd100: t, hit: !!(kd && kd.events.length) });
           if (kd && kd.events.length) { info = kd; break; }
         } catch (e) {
           debug.push({ kd100: t, err: String((e && e.message) || e).slice(0, 100) });
