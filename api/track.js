@@ -322,6 +322,14 @@ module.exports = async function handler(req, res) {
     if (!info) {
       const types = (forced ? [forced] : carrierCandidates(no)).map((c) => KD100_TYPE[c]).filter(Boolean);
       const tryTypes = types.length ? types : ['yunda', 'zhongtong', 'yuantong', 'shentong', 'youzhengguonei'];
+      // 指定了承运商但查不到时，自动候选也试一遍
+      if (forced) {
+        for (const t of (carrierCandidates(no).map((c) => KD100_TYPE[c]).filter(Boolean)).slice(0, 4)) {
+          if (tryTypes.includes(t)) continue;
+          tryTypes.push(t);
+        }
+      }
+
       for (const t of tryTypes.slice(0, 5)) {
         try {
           const kd = await queryKuaidi100(no, t, phoneTail);
