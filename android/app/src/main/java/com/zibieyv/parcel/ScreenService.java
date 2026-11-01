@@ -156,7 +156,8 @@ public class ScreenService extends Service {
      */
 
     private VirtualDisplay captureDisplay;
-    private ImageReader idleReader;
+    private ImageReader captureReader;
+    private int capW, capH;
 
     private void setupCapture() {
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
@@ -172,62 +173,44 @@ public class ScreenService extends Service {
             }
         }, ui);
 
+        // 长边压到 1080：OCR 认单号够用，镜像带宽省一大半
+        int maxSide = Math.max(screenW, screenH);
+        float scale = maxSide > 1080 ? 1080f / maxSide : 1f;
+        capW = Math.max(1, Math.round(screenW * scale));
+        capH = Math.max(1, Math.round(screenH * scale));
+
         try {
-            idleReader = ImageReader.newInstance(16, 16, PixelFormat.RGBA_8888, 1);
+            captureReader = ImageReader.newInstance(capW, capH, PixelFormat.RGBA_8888, 2);
             captureDisplay = projection.createVirtualDisplay(
-                    "parcel-capture", screenW, screenH, screenDpi,
+                    "parcel-capture", capW, capH, screenDpi,
                     DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                    idleReader.getSurface(), null, ui);
+                    captureReader.getSurface(), null, ui);
         } catch (Exception e) {
             toast("建屏失败：" + e.getMessage());
         }
     }
 
     private void captureAndRecognize() {
-        if (projection == null || captureDisplay == null) {
+        if (projection == null || captureDisplay == null || captureReader == null) {
             toast("需要重新授一次截屏，正在打开 App…");
             openApp();
             return;
         }
         toast("识别中…");
-
-        final ImageReader reader;
-        try {
-            reader = ImageReader.newInstance(screenW, screenH, PixelFormat.RGBA_8888, 2);
-            captureDisplay.setSurface(reader.getSurface());
-        } catch (Exception e) {
-            toast("取图通道失败：" + e.getMessage());
-            return;
-        }
-        ui.postDelayed(() -> grabFrame(reader, 0), 200);
+        grabFrame(0);
     }
 
-    /** 抓完把输出切回空 Surface，屏幕镜像就不再产生像素 */
-    private void idleOutput(ImageReader reader) {
-        try { if (captureDisplay != null && idleReader != null) captureDisplay.setSurface(idleReader.getSurface()); } catch (Exception ignored) {}
-        try { if (reader != null) reader.close(); } catch (Exception ignored) {}
-    }
-
-    /** 拆掉一切（只在服务销毁时调用） */
-    private void teardownCapture() {
-        try { if (captureDisplay != null) captureDisplay.release(); } catch (Exception ignored) {}
-        captureDisplay = null;
-        try { if (idleReader != null) idleReader.close(); } catch (Exception ignored) {}
-        idleReader = null;
-    }
-
-    private void grabFrame(ImageReader reader, int tries) {
+    private void grabFrame(int tries) {
         Image image = null;
         try {
-            image = reader.acquireLatestImage();
+            image = captureReader.acquireLatestImage();
         } catch (Exception ignored) {}
 
-        if (image == null && tries < 12) {
-            ui.postDelayed(() -> grabFrame(reader, tries + 1), 80);
+        if (image == null && tries < 15) {
+            ui.postDelayed(() -> grabFrame(tries + 1), 80);
             return;
         }
         if (image == null) {
-            idleOutput(reader);
             toast("画面还没准备好，再点一次");
             return;
         }
@@ -237,18 +220,16 @@ public class ScreenService extends Service {
             Image.Plane plane = image.getPlanes()[0];
             int rowStride = plane.getRowStride();
             int pixelStride = plane.getPixelStride();
-            int width = screenW + (rowStride - pixelStride * screenW) / pixelStride;
+            int width = capW + (rowStride - pixelStride * capW) / pixelStride;
 
-            Bitmap raw = Bitmap.createBitmap(width, screenH, Bitmap.Config.ARGB_8888);
+            Bitmap raw = Bitmap.createBitmap(width, capH, Bitmap.Config.ARGB_8888);
             raw.copyPixelsFromBuffer(plane.getBuffer());
-            bmp = Bitmap.createBitmap(raw, 0, 0, screenW, screenH);
+            bmp = Bitmap.createBitmap(raw, 0, 0, capW, capH);
             raw.recycle();
         } catch (Exception e) {
             toast("取图失败：" + e.getMessage());
         } finally {
             try { image.close(); } catch (Exception ignored) {}
-            // 图已经拿到，把输出切回空 Surface
-            idleOutput(reader);
         }
         if (bmp == null) return;
 
@@ -270,6 +251,14 @@ public class ScreenService extends Service {
                     toast("识别失败：" + e.getMessage());
                     recycle(target);
                 });
+    }
+
+    /** 拆掉一切（只在服务销毁时调用） */
+    private void teardownCapture() {
+        try { if (captureDisplay != null) captureDisplay.release(); } catch (Exception ignored) {}
+        captureDisplay = null;
+        try { if (captureReader != null) captureReader.close(); } catch (Exception ignored) {}
+        captureReader = null;
     }
 
     private void recycle(Bitmap b) {

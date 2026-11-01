@@ -1,6 +1,6 @@
 {
-  "versionCode": 29,
-  "versionName": "0.29",
-  "url": "/apk/parcel-0.29.apk?v=29",
-  "notes": "虚拟屏不再销毁，不会误触发授权失效"
+  "versionCode": 30,
+  "versionName": "0.30",
+  "url": "/apk/parcel-0.30.apk?v=30",
+  "notes": "截屏通道修正，拿不到黑帧"
 }
