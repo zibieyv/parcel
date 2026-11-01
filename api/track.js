@@ -218,6 +218,84 @@ async function queryKuaidi100(no, type, phone) {
   };
 }
 
+
+/* ---------------- 快递鸟（正规接口，按单号+手机查，不串号） ---------------- */
+const crypto = require('crypto');
+
+const KDN_SHIPPER = {
+  yuantong: 'YTO',
+  zhongtong: 'ZTO',
+  yunda: 'YD',
+  shentong: 'STO',
+  jtexpress: 'JTSD',
+  shunfeng: 'SF',
+  youzhengguonei: 'YZPY',
+  ems: 'EMS',
+  jd: 'JD',
+};
+
+const KDN_STATE = {
+  0: [20, 'in_transit'],
+  1: [10, 'in_transit'],
+  2: [60, 'exception'],
+  3: [50, 'delivered'],
+  4: [60, 'exception'],
+  5: [40, 'delivering'],
+  6: [60, 'exception'],
+};
+
+function kdnSign(json, key) {
+  // 快递鸟要的是 base64(md5 的十六进制字符串)，不是 base64(md5 原始字节)
+  const hex = crypto.createHash('md5').update(json + key, 'utf8').digest('hex');
+  return Buffer.from(hex, 'utf8').toString('base64');
+}
+
+async function queryKdn(no, shipperCode, phone) {
+  const id = process.env.KDNIAO_ID;
+  const key = process.env.KDNIAO_KEY;
+  if (!id || !key) return null;
+
+  const payload = { OrderCode: '', ShipperCode: shipperCode, LogisticCode: no };
+  if (phone) payload.CustomerName = phone;
+  const requestData = JSON.stringify(payload);
+
+  const body = new URLSearchParams({
+    EBusinessID: id,
+    RequestType: '8001',
+    RequestData: requestData,
+    DataSign: kdnSign(requestData, key),
+    DataType: '2',
+  });
+
+  const res = await fetch('https://api.kdniao.com/Ebusiness/EbusinessOrderHandle.aspx', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { return null; }
+  if (!json.Success || !Array.isArray(json.Traces) || !json.Traces.length) return null;
+
+  const st = KDN_STATE[Number(json.State)] || [20, 'in_transit'];
+  const events = json.Traces.map((t) => ({
+    time: t.AcceptTime || '',
+    text: t.AcceptStation || '',
+    where: '',
+  })).filter((e) => e.text).reverse();
+
+  return {
+    code: st[0],
+    status: st[1],
+    statusText: events[0]?.text?.slice(0, 20) || '',
+    latest: events[0]?.text || '',
+    latestTime: events[0]?.time || '',
+    carrier: shipperCode,
+    events: events.slice(0, 40),
+    source: 'kdniao',
+  };
+}
+
 function pickInfo(entry) {
   const info = entry && entry.track_info;
   if (!info) return null;
@@ -318,7 +396,22 @@ module.exports = async function handler(req, res) {
       debug.push({ carrier: carrier || 'auto', regErr, accepted: accepted.length, rejected: rejected.length, reason: rej && rej.reason, code: got ? got.code : null });
     }
 
-    // 17TRACK 对国内单号基本没数据，换快递100再试
+    // 国内号优先走快递鸟（正规接口，带手机号不串号）
+    if (!info && domestic) {
+      const codes = (forced ? [forced] : carrierCandidates(no)).map((c) => KDN_SHIPPER[c]).filter(Boolean);
+      const list = codes.length ? codes : ['YZPY', 'YTO', 'ZTO', 'YD', 'STO', 'JTSD'];
+      for (const code of [...new Set(list)].slice(0, 4)) {
+        try {
+          const kdn = await queryKdn(no, code, phoneTail);
+          debug.push({ kdn: code, hit: !!(kdn && kdn.events.length) });
+          if (kdn && kdn.events.length) { info = kdn; break; }
+        } catch (e) {
+          debug.push({ kdn: code, err: String((e && e.message) || e).slice(0, 80) });
+        }
+      }
+    }
+
+    // 快递鸟没有时，再退到快递100
     if (!info) {
       const types = (forced ? [forced] : carrierCandidates(no)).map((c) => KD100_TYPE[c]).filter(Boolean);
       const tryTypes = types.length ? types : ['yunda', 'zhongtong', 'yuantong', 'shentong', 'youzhengguonei'];
