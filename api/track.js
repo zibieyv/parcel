@@ -107,6 +107,68 @@ async function call17track(path, payload, token) {
   return json.data || {};
 }
 
+
+/** 快递100 的类型代码（国内承运商） */
+const KD100_TYPE = {
+  yuantong: 'yuantong',
+  zhongtong: 'zhongtong',
+  yunda: 'yunda',
+  shentong: 'shentong',
+  jtexpress: 'jtexpress',
+  shunfeng: 'shunfeng',
+  youzhengguonei: 'youzhengguonei',
+  ems: 'ems',
+  jd: 'jd',
+};
+
+const KD100_STATE = {
+  0: [20, 'in_transit'],
+  1: [10, 'in_transit'],
+  2: [60, 'exception'],
+  3: [50, 'delivered'],
+  4: [60, 'exception'],
+  5: [40, 'delivering'],
+  6: [60, 'exception'],
+  7: [60, 'exception'],
+  8: [35, 'in_transit'],
+  14: [60, 'exception'],
+};
+
+/** 走快递100的公开查询接口，国内单号命中率比 17TRACK 高得多 */
+async function queryKuaidi100(no, type) {
+  const temp = '0.' + String(no).length;
+  const url = `https://www.kuaidi100.com/query?type=${encodeURIComponent(type)}&postid=${encodeURIComponent(no)}&temp=${temp}&phone=`;
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+      'Referer': 'https://www.kuaidi100.com/',
+      'Accept': 'application/json, text/plain, */*',
+    },
+  });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { return null; }
+  if (json.status !== '200' || !Array.isArray(json.data) || !json.data.length) return null;
+
+  const st = KD100_STATE[Number(json.state)] || [20, 'in_transit'];
+  const events = json.data.map((e) => ({
+    time: e.ftime || e.time || '',
+    text: e.context || '',
+    where: '',
+  })).filter((e) => e.text);
+
+  return {
+    code: st[0],
+    status: st[1],
+    statusText: events[0]?.text?.slice(0, 20) || '',
+    latest: events[0]?.text || '',
+    latestTime: events[0]?.time || '',
+    carrier: type,
+    events: events.slice(0, 40),
+    source: 'kuaidi100',
+  };
+}
+
 function pickInfo(entry) {
   const info = entry && entry.track_info;
   if (!info) return null;
@@ -201,6 +263,20 @@ module.exports = async function handler(req, res) {
       const rej = rejected.find((r) => normalizeNo(r.number) === no);
       if (rej && rej.reason) lastReason = String(rej.reason);
       debug.push({ carrier: carrier || 'auto', regErr, accepted: accepted.length, rejected: rejected.length, reason: rej && rej.reason, code: got ? got.code : null });
+    }
+
+    // 17TRACK 对国内单号基本没数据，换快递100再试
+    if (!info) {
+      const types = (forced ? [forced] : carrierCandidates(no)).map((c) => KD100_TYPE[c]).filter(Boolean);
+      const tryTypes = types.length ? types : ['yunda', 'zhongtong', 'yuantong', 'shentong', 'youzhengguonei'];
+      for (const t of tryTypes.slice(0, 5)) {
+        try {
+          const kd = await queryKuaidi100(no, t);
+          if (kd && kd.events.length) { info = kd; break; }
+        } catch (e) {
+          debug.push({ kd100: t, err: String((e && e.message) || e).slice(0, 100) });
+        }
+      }
     }
 
     if (!info) {
