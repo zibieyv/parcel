@@ -60,6 +60,34 @@ function normalizeNo(raw) {
   return String(raw || '').replace(/\s+/g, '').toUpperCase();
 }
 
+/**
+ * 国内单号光靠自动识别经常匹配不到承运商，
+ * 这里按前缀/长度给出候选，依次尝试注册。
+ */
+function carrierCandidates(no) {
+  const n = no.toUpperCase();
+  const out = [];
+
+  if (/^YT\d{10,}/.test(n)) out.push('yuantong');
+  if (/^ZT\d{10,}/.test(n)) out.push('zhongtong');
+  if (/^YD\d{10,}/.test(n)) out.push('yunda');
+  if (/^JT\d{10,}/.test(n)) out.push('jtexpress');
+  if (/^SF\d{10,}/.test(n)) out.push('shunfeng');
+  if (/^JD[A-Z0-9]{10,}/.test(n)) out.push('jd');
+  if (/^DPK\d+/.test(n)) out.push('dhl');
+  if (/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(n)) out.push('china-post', 'ems');
+
+  // 中国邮政：93/94/95/96/97/98/91 开头的 13 位
+  if (/^9[1-8]\d{11}$/.test(n)) out.push('youzhengguonei', 'ems', 'china-post');
+
+  // 纯数字 12–15 位：韵达/中通/圆通/申通都可能，逐个试
+  if (/^\d{12,15}$/.test(n)) {
+    out.push('yunda', 'zhongtong', 'yuantong', 'shentong', 'jtexpress');
+  }
+
+  return [...new Set(out)];
+}
+
 async function call17track(path, payload, token) {
   const res = await fetch(`${TRACK17_BASE}${path}`, {
     method: 'POST',
@@ -133,23 +161,47 @@ module.exports = async function handler(req, res) {
     if (!no) return send(400, { ok: false, error: '缺少单号参数 no' });
     if (!/^[A-Z0-9]{6,40}$/.test(no)) return send(400, { ok: false, error: '单号格式不对' });
 
-    // 先注册（已注册会返回已存在，忽略即可），再取轨迹
-    try {
-      await call17track('/register', [{ number: no }], token);
-    } catch (e) {
-      // 注册失败不致命，gettrackinfo 仍可能拿到已注册的号
+    // 指定了承运商就只试那一个，否则按候选依次试
+    const forced = normalizeNo(req.query && req.query.carrier).toLowerCase();
+    const candidates = forced ? [forced] : carrierCandidates(no);
+
+    let info = null;
+    let lastReason = '暂无轨迹';
+
+    // 先试无承运商（国际单号多半能自动识别）
+    const tries = [null, ...candidates];
+    for (const carrier of tries) {
+      try {
+        const payload = carrier ? [{ number: no, carrier }] : [{ number: no }];
+        await call17track('/register', payload, token);
+      } catch (e) {
+        // 已注册过也算正常，继续查
+      }
+
+      let data;
+      try {
+        data = await call17track('/gettrackinfo', [{ number: no }], token);
+      } catch (e) {
+        lastReason = String((e && e.message) || e).slice(0, 120);
+        continue;
+      }
+
+      const accepted = data.accepted || [];
+      const rejected = data.rejected || [];
+      const hit = accepted.find((a) => normalizeNo(a.number) === no) || accepted[0];
+      const got = pickInfo(hit);
+
+      if (got && (got.events.length > 0 || got.code > 0)) {
+        info = got;
+        break;
+      }
+
+      const rej = rejected.find((r) => normalizeNo(r.number) === no);
+      if (rej && rej.reason) lastReason = String(rej.reason);
     }
 
-    const data = await call17track('/gettrackinfo', [{ number: no }], token);
-    const accepted = data.accepted || [];
-    const rejected = data.rejected || [];
-
-    const hit = accepted.find((a) => normalizeNo(a.number) === no) || accepted[0];
-    const info = pickInfo(hit);
-
     if (!info) {
-      const reason = rejected.find((r) => normalizeNo(r.number) === no)?.reason || '暂无轨迹';
-      return send(404, { ok: false, no, error: String(reason) });
+      return send(404, { ok: false, no, error: lastReason });
     }
 
     return send(200, {
