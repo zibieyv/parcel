@@ -40,23 +40,19 @@ header{padding:26px 0 0}
 
 /* 视频 */
 .hero{margin-top:22px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);background:#000;position:relative;aspect-ratio:16/9}
-.hero iframe{width:100%;height:100%;border:0;display:block}
-.poster{
-  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:14px;cursor:pointer;background:
-    radial-gradient(600px 300px at 50% 40%, rgba(61,126,255,.22), transparent 70%),
-    repeating-linear-gradient(45deg, #141821 0 12px, #12151c 12px 24px);
-  transition:opacity .25s ease;
+.hero video{width:100%;height:100%;object-fit:cover;display:block}
+.mask{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  background:linear-gradient(180deg,rgba(0,0,0,.15),rgba(0,0,0,.55));transition:opacity .3s}
+.mask.hide{opacity:0;pointer-events:none}
+.sound{
+  border:0;cursor:pointer;font:inherit;font-size:15px;font-weight:600;color:#111;
+  background:#fff;padding:14px 22px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.4);
 }
-.poster.hide{opacity:0;pointer-events:none}
-.play{
-  width:74px;height:74px;border-radius:50%;background:rgba(255,255,255,.94);
-  display:grid;place-items:center;box-shadow:0 10px 30px rgba(0,0,0,.45);
+.sound:active{transform:scale(.97)}
+.skip{
+  border:0;cursor:pointer;font:inherit;font-size:12px;color:#cfd6e2;background:rgba(0,0,0,.35);
+  padding:6px 12px;border-radius:999px;
 }
-.play::after{content:"";display:block;margin-left:6px;
-  border-left:22px solid #111;border-top:14px solid transparent;border-bottom:14px solid transparent}
-.poster b{font-size:15px;font-weight:600;letter-spacing:.5px}
-.poster span{font-size:12px;color:var(--dim2)}
 
 /* 标题 */
 .intro{margin:26px 0 18px}
@@ -99,10 +95,10 @@ footer a{color:var(--dim2)}
   </header>
 
   <div class="hero" id="hero">
-    <div class="poster" id="poster">
-      <div class="play"></div>
-      <b>点一下，聆听经典</b>
-      <span>建议配合耳机食用</span>
+    <video id="vid" src="/rickroll.mp4" muted autoplay playsinline loop preload="auto"></video>
+    <div class="mask" id="mask">
+      <button class="sound" id="soundBtn">🔊 点这里开声音</button>
+      <button class="skip" id="skipBtn">跳過 ›</button>
     </div>
   </div>
 
@@ -127,10 +123,6 @@ footer a{color:var(--dim2)}
       <div class="d">包裹 App 的安装包，提取码 7m8w。</div>
     </a>
 
-    <a class="card" href="mailto:2182098237@qq.com">
-      <div class="t"><span>邮件</span><span class="arrow">↗</span></div>
-      <div class="d">有事找我，发邮件最快。</div>
-    </a>
   </div>
 
   <footer>
@@ -140,20 +132,25 @@ footer a{color:var(--dim2)}
 
 <script>
 (function () {
-  var poster = document.getElementById('poster');
-  var hero = document.getElementById('hero');
-  var loaded = false;
+  var v = document.getElementById('vid');
+  var mask = document.getElementById('mask');
+  var soundBtn = document.getElementById('soundBtn');
+  var skipBtn = document.getElementById('skipBtn');
 
-  poster.addEventListener('click', function () {
-    if (loaded) return;
-    loaded = true;
-    poster.classList.add('hide');
-    var f = document.createElement('iframe');
-    f.src = 'https://player.bilibili.com/player.html?bvid=BV1Zf4y1m7eR&page=1&high_quality=1&danmaku=0&autoplay=1';
-    f.allow = 'autoplay; fullscreen';
-    f.setAttribute('allowfullscreen', 'true');
-    f.setAttribute('scrolling', 'no');
-    hero.appendChild(f);
+  // 静音自动播放（浏览器都允许），点按钮才放声音
+  v.play().catch(function () { /* 被拦截就等用户点 */ });
+
+  soundBtn.addEventListener('click', function () {
+    v.muted = false;
+    v.currentTime = 0;
+    v.play().catch(function () {});
+    mask.classList.add('hide');
+  });
+
+  skipBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    v.pause();
+    document.getElementById('hero').style.display = 'none';
   });
 })();
 </script>
