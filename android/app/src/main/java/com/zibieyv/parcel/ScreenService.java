@@ -59,8 +59,6 @@ public class ScreenService extends Service {
     private static final String EXTRA_DATA = "data";
 
     private MediaProjection projection;
-    private VirtualDisplay virtualDisplay;
-    private ImageReader imageReader;
     private int screenW, screenH, screenDpi;
 
     private WindowManager wm;
@@ -142,12 +140,7 @@ public class ScreenService extends Service {
     public void onDestroy() {
         hideBall();
         removeResultCard();
-        if (virtualDisplay != null) {
-            try { virtualDisplay.release(); } catch (Exception ignored) {}
-        }
-        if (imageReader != null) {
-            try { imageReader.close(); } catch (Exception ignored) {}
-        }
+        teardownCapture();
         if (projection != null) {
             try { projection.stop(); } catch (Exception ignored) {}
         }
@@ -157,7 +150,13 @@ public class ScreenService extends Service {
         super.onDestroy();
     }
 
-    /* ---------------- 截屏通道（按需建屏，平时不占 GPU） ---------------- */
+    /* ---------------- 截屏通道 ----------------
+     * 虚拟屏创建一次就不销毁（销毁会被某些 ROM 误判成"授权结束"）。
+     * 平时把它的输出接到 16×16 的空 Surface，几乎不耗 GPU；抓图时再切到真实通道。
+     */
+
+    private VirtualDisplay captureDisplay;
+    private ImageReader idleReader;
 
     private void setupCapture() {
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
@@ -168,55 +167,67 @@ public class ScreenService extends Service {
         projection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
-                // 部分 ROM 在释放虚拟屏时会误触发这里，所以只标记失效，不停服务
                 projection = null;
                 toast("截屏授权已结束，点球时会让你重新授权");
             }
         }, ui);
+
+        try {
+            idleReader = ImageReader.newInstance(16, 16, PixelFormat.RGBA_8888, 1);
+            captureDisplay = projection.createVirtualDisplay(
+                    "parcel-capture", screenW, screenH, screenDpi,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    idleReader.getSurface(), null, ui);
+        } catch (Exception e) {
+            toast("建屏失败：" + e.getMessage());
+        }
     }
 
     private void captureAndRecognize() {
-        if (projection == null) {
+        if (projection == null || captureDisplay == null) {
             toast("需要重新授一次截屏，正在打开 App…");
             openApp();
             return;
         }
         toast("识别中…");
 
-        // 只在这一次截屏期间创建虚拟屏，抓完立刻释放，避免常驻发热
-        final ImageReader reader = ImageReader.newInstance(screenW, screenH, PixelFormat.RGBA_8888, 2);
-        final VirtualDisplay vd;
+        final ImageReader reader;
         try {
-            vd = projection.createVirtualDisplay(
-                    "parcel-capture", screenW, screenH, screenDpi,
-                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                    reader.getSurface(), null, ui);
+            reader = ImageReader.newInstance(screenW, screenH, PixelFormat.RGBA_8888, 2);
+            captureDisplay.setSurface(reader.getSurface());
         } catch (Exception e) {
-            reader.close();
-            toast("建屏失败：" + e.getMessage());
+            toast("取图通道失败：" + e.getMessage());
             return;
         }
-        // 让画面稳定两帧再取
-        ui.postDelayed(() -> grabFrame(reader, vd, 0), 180);
+        ui.postDelayed(() -> grabFrame(reader, 0), 200);
     }
 
-    private void releaseCapture(ImageReader reader, VirtualDisplay vd) {
-        try { if (vd != null) vd.release(); } catch (Exception ignored) {}
+    /** 抓完把输出切回空 Surface，屏幕镜像就不再产生像素 */
+    private void idleOutput(ImageReader reader) {
+        try { if (captureDisplay != null && idleReader != null) captureDisplay.setSurface(idleReader.getSurface()); } catch (Exception ignored) {}
         try { if (reader != null) reader.close(); } catch (Exception ignored) {}
     }
 
-    private void grabFrame(ImageReader reader, VirtualDisplay vd, int tries) {
+    /** 拆掉一切（只在服务销毁时调用） */
+    private void teardownCapture() {
+        try { if (captureDisplay != null) captureDisplay.release(); } catch (Exception ignored) {}
+        captureDisplay = null;
+        try { if (idleReader != null) idleReader.close(); } catch (Exception ignored) {}
+        idleReader = null;
+    }
+
+    private void grabFrame(ImageReader reader, int tries) {
         Image image = null;
         try {
             image = reader.acquireLatestImage();
         } catch (Exception ignored) {}
 
         if (image == null && tries < 12) {
-            ui.postDelayed(() -> grabFrame(reader, vd, tries + 1), 80);
+            ui.postDelayed(() -> grabFrame(reader, tries + 1), 80);
             return;
         }
         if (image == null) {
-            releaseCapture(reader, vd);
+            idleOutput(reader);
             toast("画面还没准备好，再点一次");
             return;
         }
@@ -236,8 +247,8 @@ public class ScreenService extends Service {
             toast("取图失败：" + e.getMessage());
         } finally {
             try { image.close(); } catch (Exception ignored) {}
-            // 图已经拿到，立刻把虚拟屏拆掉
-            releaseCapture(reader, vd);
+            // 图已经拿到，把输出切回空 Surface
+            idleOutput(reader);
         }
         if (bmp == null) return;
 
