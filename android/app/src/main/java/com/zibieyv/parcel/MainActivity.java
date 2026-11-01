@@ -190,22 +190,42 @@ public class MainActivity extends Activity implements Bridge.Sink {
 
     /* ---------------- 下载更新 ---------------- */
 
+    /** 把下载进度推给网页里的进度条 */
+    private void sendUpdateProgress(int pct) {
+        runOnUiThread(() -> {
+            try {
+                if (web != null) {
+                    web.evaluateJavascript(
+                            "window.__onUpdateProgress&&window.__onUpdateProgress(" + pct + ")", null);
+                }
+            } catch (Exception ignored) {}
+        });
+    }
+
     private void pollDownload(DownloadManager dm, long id, int tries) {
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (tries > 240) return; // 最多等 4 分钟
+            if (tries > 300) { sendUpdateProgress(-1); return; }
             Cursor c = null;
             try {
                 c = dm.query(new DownloadManager.Query().setFilterById(id));
                 if (c != null && c.moveToFirst()) {
                     int status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                    long done = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+                    long total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+
                     if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        sendUpdateProgress(100);
                         Uri file = dm.getUriForDownloadedFile(id);
                         if (file != null) launchInstaller(file);
                         return;
                     }
                     if (status == DownloadManager.STATUS_FAILED) {
+                        sendUpdateProgress(-1);
                         toast("下载失败，请检查网络");
                         return;
+                    }
+                    if (total > 0) {
+                        sendUpdateProgress((int) Math.min(99, done * 100 / total));
                     }
                 }
             } catch (Exception ignored) {
@@ -213,7 +233,7 @@ public class MainActivity extends Activity implements Bridge.Sink {
                 if (c != null) c.close();
             }
             pollDownload(dm, id, tries + 1);
-        }, 1000);
+        }, 400);
     }
 
     private void launchInstaller(Uri apkUri) {

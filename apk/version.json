@@ -1,6 +1,6 @@
 {
-  "versionCode": 31,
-  "versionName": "0.31",
-  "url": "/apk/parcel-0.31.apk?v=31",
-  "notes": "只有悬浮球开着时才录屏，不再黑帧"
+  "versionCode": 32,
+  "versionName": "0.32",
+  "url": "/apk/parcel-0.32.apk?v=32",
+  "notes": "下载进度条"
 }
