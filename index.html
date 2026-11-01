@@ -278,9 +278,9 @@ main{padding:14px 16px 0}
       <p id="accState" style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:10px"></p>
     </div>
 
-    <a href="/apk/parcel-0.36.apk?v=36" download
+    <a href="/apk/parcel-0.37.apk?v=37" download
        style="display:block;text-align:center;margin-top:22px;padding:12px;border-radius:12px;background:var(--card2);border:1px solid var(--line);font-size:14px;color:#c8d0dc;text-decoration:none">
-      下载安卓 App（v0.36，截屏抓单号）
+      下载安卓 App（v0.37，截屏抓单号）
     </a>
 
     <div style="margin-top:22px;display:flex;gap:10px">
@@ -720,7 +720,65 @@ main{padding:14px 16px 0}
   });
 
   /* ---------- 查询 ---------- */
+  // 国内承运商：17TRACK 基本没数据，改由手机直连快递100（国内 IP 才查得到）
+  const KD_TYPE = [
+    [/^YT\d{10,}/, 'yuantong'],
+    [/^ZT\d{10,}/, 'zhongtong'],
+    [/^YD\d{10,}/, 'yunda'],
+    [/^JT\d{10,}/, 'jtexpress'],
+    [/^SF\d{10,}/, 'shunfeng'],
+    [/^JD[A-Z0-9]{10,}/, 'jd'],
+    [/^9[1-8]\d{11}$/, 'youzhengguonei'],
+  ];
+  const KD_STATE = {
+    0: ['in_transit', '运输中'], 1: ['in_transit', '已揽收'], 2: ['exception', '疑难'],
+    3: ['delivered', '已签收'], 4: ['exception', '退签'], 5: ['delivering', '派送中'],
+    6: ['exception', '退回'], 7: ['exception', '转投'], 8: ['in_transit', '清关'],
+    14: ['exception', '拒签'],
+  };
+
+  function domesticTypes(no) {
+    const n = String(no || '').toUpperCase();
+    for (const [re, t] of KD_TYPE) if (re.test(n)) return [t];
+    if (/^\d{12,15}$/.test(n)) return ['yunda', 'zhongtong', 'yuantong', 'shentong', 'jtexpress'];
+    return null;
+  }
+
+  function kdUrl(no, type) {
+    return 'https://www.kuaidi100.com/query?type=' + encodeURIComponent(type) +
+      '&postid=' + encodeURIComponent(no) + '&temp=0.' + String(no).length + '&phone=';
+  }
+
+  async function queryKuaidi(no, types) {
+    const httpGet = window.Native && window.Native.httpGet;
+    if (!httpGet) return null;
+    for (const t of types) {
+      let body = '';
+      try { body = httpGet(kdUrl(no, t)); } catch (e) { continue; }
+      if (!body) continue;
+      let j;
+      try { j = JSON.parse(body); } catch (e) { continue; }
+      if (j.status !== '200' || !Array.isArray(j.data) || !j.data.length) continue;
+      const st = KD_STATE[Number(j.state)] || ['in_transit', '运输中'];
+      const events = j.data.map((e) => ({
+        time: e.ftime || e.time || '', text: e.context || '', where: '',
+      })).filter((e) => e.text);
+      if (!events.length) continue;
+      return {
+        ok: true, no, status: st[0], statusText: st[1], carrier: t,
+        latest: events[0].text, latestTime: events[0].time,
+        events, updatedAt: new Date().toISOString(),
+      };
+    }
+    return null;
+  }
+
   async function queryTrack(no) {
+    const types = domesticTypes(no);
+    if (types && window.Native && window.Native.httpGet) {
+      const kd = await queryKuaidi(no, types);
+      if (kd) return kd;
+    }
     const base = (db.settings.base || location.origin).replace(/\/$/, '');
     const url = new URL('/api/track', base);
     url.searchParams.set('no', no);

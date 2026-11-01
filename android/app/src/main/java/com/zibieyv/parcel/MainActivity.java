@@ -333,6 +333,33 @@ public class MainActivity extends Activity implements Bridge.Sink {
             });
         }
 
+        /** 同步 HTTP GET，返回响应体；国内快递查询走这里（手机是国内 IP） */
+        @JavascriptInterface
+        public String httpGet(String url) {
+            java.io.InputStream in = null;
+            java.net.HttpURLConnection c = null;
+            try {
+                c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                c.setConnectTimeout(8000);
+                c.setReadTimeout(12000);
+                c.setRequestProperty("User-Agent",
+                        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36");
+                c.setRequestProperty("Referer", "https://www.kuaidi100.com/");
+                c.setRequestProperty("Accept", "application/json, text/plain, */*");
+                in = c.getInputStream();
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                return bo.toString("UTF-8");
+            } catch (Exception e) {
+                return "";
+            } finally {
+                try { if (in != null) in.close(); } catch (Exception ignored) {}
+                try { if (c != null) c.disconnect(); } catch (Exception ignored) {}
+            }
+        }
+
         /** 打开系统的「通知使用权」设置页，用于开启取件码自动抓取 */
         @JavascriptInterface
         public void openNotificationSettings() {
