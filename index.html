@@ -728,7 +728,7 @@ main{padding:14px 16px 0}
     [/^JT\d{10,}/, 'jtexpress'],
     [/^SF\d{10,}/, 'shunfeng'],
     [/^JD[A-Z0-9]{10,}/, 'jd'],
-    [/^9[1-8]\d{11}$/, 'youzhengguonei'],
+    [/^9[1-8]\d{11}$/, 'youzhengguonei', 'ems'],
   ];
   const KD_STATE = {
     0: ['in_transit', '运输中'], 1: ['in_transit', '已揽收'], 2: ['exception', '疑难'],
@@ -739,7 +739,7 @@ main{padding:14px 16px 0}
 
   function domesticTypes(no) {
     const n = String(no || '').toUpperCase();
-    for (const [re, t] of KD_TYPE) if (re.test(n)) return [t];
+    for (const [re, ...types] of KD_TYPE) if (re.test(n)) return types;
     if (/^\d{12,15}$/.test(n)) return ['yunda', 'zhongtong', 'yuantong', 'shentong', 'jtexpress'];
     return null;
   }
@@ -759,6 +759,9 @@ main{padding:14px 16px 0}
       let j;
       try { j = JSON.parse(body); } catch (e) { continue; }
       if (j.status !== '200' || !Array.isArray(j.data) || !j.data.length) continue;
+      // 快递100 可能把单号匹配到别的承运商，com 不一致就是别人的包裹
+      const com = String(j.com || '').toLowerCase();
+      if (com && com !== t) continue;
       const st = KD_STATE[Number(j.state)] || ['in_transit', '运输中'];
       const events = j.data.map((e) => ({
         time: e.ftime || e.time || '', text: e.context || '', where: '',
