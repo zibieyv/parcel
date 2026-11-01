@@ -262,20 +262,10 @@ main{padding:14px 16px 0}
     </div>
 
     <div style="margin-top:22px">
-      <div class="field"><label>家庭码（只按家庭码同步包裹信息）</label>
-        <input id="s_room" placeholder="房间码，比如 7Q2K9M" autocapitalize="characters">
-      </div>
-      <div class="field"><label>家庭码绑定的分组名（可留空）</label>
-        <input id="s_roomGroup" placeholder="默认跟随命名者">
-      </div>
-      <div style="display:flex;gap:10px">
-        <button class="ghost" id="genRoom">随机生成房间码</button>
-        <button class="ghost" id="saveRoom">保存并同步</button>
-      </div>
-      <button class="ghost" id="syncNow" style="margin-top:8px">立即同步</button>
-      <p id="syncState" style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:10px"></p>
-    </div>
-
+      <div class="field"><label>家庭码</label></div>
+      <p style="font-size:12px;color:var(--dim2);line-height:1.7;margin-bottom:10px">
+        家庭码在右上角 👤 账号页里管理，可以加多个房间。
+      </p>
     <div class="field" style="margin-top:22px"><label>接口地址</label><input id="s_base" placeholder="https://parcel-seven-omega.vercel.app"></div>
     <div class="field"><label>APP_TOKEN</label><input id="s_token" placeholder="与 Vercel 环境变量一致"></div>
     <button class="primary" id="saveSettings">保存</button>
@@ -333,9 +323,14 @@ main{padding:14px 16px 0}
     <button class="primary" id="accSave">保存昵称</button>
 
     <div style="margin-top:22px">
-      <div class="field"><label>家庭码</label><input id="accRoom" readonly placeholder="还没加入"></div>
-      <div class="field"><label>家庭成员</label></div>
-      <div id="accMembers" style="font-size:13px;color:var(--dim);line-height:1.9"></div>
+      <div class="field"><label>我加入的家庭码</label></div>
+      <div id="accRooms" style="font-size:13px;color:var(--dim);line-height:1.9;margin-bottom:12px"></div>
+      <div class="row2">
+        <div class="field"><label>家庭码</label><input id="accRoomCode" placeholder="如 7Q2K9M" autocapitalize="characters"></div>
+        <div class="field"><label>分组名（可留空）</label><input id="accRoomGroup" placeholder="默认跟随命名者"></div>
+      </div>
+      <button class="ghost" id="accJoin">加入这个家庭码</button>
+      <button class="ghost" id="accSync" style="margin-top:8px">立即同步全部房间</button>
     </div>
     <p style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:14px">
       昵称只用来在包裹上标"是谁的"，不涉及任何账号密码。
@@ -398,7 +393,7 @@ main{padding:14px 16px 0}
     items: [],
     groups: ['我的'],
     deleted: {},
-    settings: { base: location.origin, token: '', room: '', roomGroup: '', nickname: '', deviceId: '', members: {} },
+    settings: { base: location.origin, token: '', rooms: [], nickname: '', deviceId: '', members: {} },
   };
   let db = load();
   dedupeByNo();
@@ -459,7 +454,16 @@ main{padding:14px 16px 0}
         groups: Array.isArray(raw.groups) ? raw.groups : [...defaults.groups],
         pendingCodes: Array.isArray(raw.pendingCodes) ? raw.pendingCodes : [],
         deleted: raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {},
-        settings: { ...defaults.settings, ...(raw.settings || {}) },
+        settings: (() => {
+          const st = { ...defaults.settings, ...(raw.settings || {}) };
+          if (!Array.isArray(st.rooms)) st.rooms = [];
+          if (!st.rooms.length && st.room) {
+            st.rooms = [{ code: st.room, group: st.roomGroup || '', members: st.members || {} }];
+          }
+          st.rooms.forEach((r) => { if (!r.members) r.members = {}; });
+          delete st.room; delete st.roomGroup;
+          return st;
+        })(),
       };
     } catch {
       return { ...defaults, groups: [...defaults.groups], deleted: {} };
@@ -893,9 +897,6 @@ main{padding:14px 16px 0}
   $('openSettings').onclick = () => {
     $('s_base').value = db.settings.base || location.origin;
     $('s_token').value = db.settings.token || '';
-    $('s_room').value = db.settings.room || '';
-    $('s_roomGroup').value = db.settings.roomGroup || '';
-    refreshSyncState();
     openSheet('setSheet');
   };
 
@@ -911,19 +912,19 @@ main{padding:14px 16px 0}
   let lastSync = null;
 
   function roomCode() {
-    return (db.settings.room || '').trim().toUpperCase();
+    return ((db.settings.rooms || [])[0] || {}).code || '';
   }
 
   function refreshSyncState() {
     const el = $('syncState');
     if (!el) return;
-    const room = roomCode();
-    if (!room) {
-      el.textContent = '没设房间码，只有本机有数据。填一个相同的房间码，家人的手机就会看到同一份列表。';
+    const rooms = db.settings.rooms || [];
+    if (!rooms.length) {
+      el.textContent = '还没加入家庭码，只有本机有数据。';
       return;
     }
-    el.textContent = `房间 ${room}` + (db.settings.roomGroup ? ` · 只同步「${db.settings.roomGroup}」分组` : ' · 分组名为空，跟随命名者')
-      + (lastSync ? ` · 上次同步 ${relTime(lastSync)}` : '');
+    const names = rooms.map((r) => r.code + (r.group ? '(' + r.group + ')' : '')).join('、');
+    el.textContent = `${rooms.length} 个家庭码：${names}` + (lastSync ? ` · 上次同步 ${relTime(lastSync)}` : '');
   }
 
   function scheduleSync() {
@@ -932,123 +933,125 @@ main{padding:14px 16px 0}
     syncTimer = setTimeout(() => { syncNow(true).catch(() => {}); }, 1500);
   }
 
+  /** 所有房间依次同步：每个房间只推/拉它绑定分组的包裹 */
   async function syncNow(silent) {
-    const room = roomCode();
-    if (!room) { if (!silent) toast('先在设置里填房间码'); return; }
+    const rooms = db.settings.rooms || [];
+    if (!rooms.length) { if (!silent) toast('还没有加入家庭码'); return; }
     if (syncing) return;
     syncing = true;
+    let total = 0, okCount = 0;
     try {
-      const base = (db.settings.base || location.origin).replace(/\/$/, '');
-      const url = new URL('/api/sync', base);
-      url.searchParams.set('room', room);
-      if (db.settings.token) url.searchParams.set('token', db.settings.token);
-
-      // 没填分组名 → 跟随创建者：先问服务端这个房间叫什么
-      let roomGroup = (db.settings.roomGroup || '').trim();
-      if (!roomGroup) {
+      for (const r of rooms) {
         try {
-          const info = await fetch(url, { headers: { accept: 'application/json' } }).then((x) => x.json());
-          const serverName = (info && info.roomName || '').trim();
-          if (serverName) {
-            roomGroup = serverName;
-            db.settings.roomGroup = serverName;
-            if (!db.groups.includes(serverName)) db.groups.push(serverName);
-          }
-        } catch (e) { /* 拉不到就按空处理 */ }
+          total += await syncRoom(r, silent);
+          okCount++;
+        } catch (e) {
+          if (!silent) toast(`房间 ${r.code} 同步失败：${e.message}`);
+        }
       }
-      if (!roomGroup && !silent) {
-        toast('这个房间还没有名字，先填个分组名');
-        syncing = false;
-        return;
-      }
-
-      const inRoom = (it) => (roomGroup ? itemInGroup(it, roomGroup) : false);
-      const shared = db.items.filter(inRoom);
-
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          items: shared,
-          groups: roomGroup ? [roomGroup] : [],
-          deleted: db.deleted || {},
-          roomName: roomGroup || '',
-          members: { [db.settings.deviceId]: db.settings.nickname || '' },
-        }),
-      });
-      const j = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
-      if (!j.ok) throw new Error(j.error || 'HTTP ' + r.status);
-      if (j.members && typeof j.members === 'object') db.settings.members = j.members;
-
-      // 只替换该分组的包裹，其他分组原样保留
-      const others = db.items.filter((i) => !inRoom(i));
-      const remote = Array.isArray(j.items) ? j.items : [];
-      db.items = others.concat(remote.map((it) => {
-        const gs = Array.isArray(it.groups) ? it.groups.slice() : (it.group ? [it.group] : []);
-        if (roomGroup && !gs.includes(roomGroup)) gs.push(roomGroup);
-        return { ...it, groups: gs, group: gs[0] || '' };
-      }));
-      dedupeByNo();
-
       lastSync = new Date().toISOString();
       localStorage.setItem(KEY, JSON.stringify(db));
       refreshFilters(); render(); refreshSyncState();
-      if (!silent) toast(`同步完成（第 ${j.rev} 版，${remote.length} 件）`);
-    } catch (err) {
-      if (!silent) toast('同步失败：' + err.message);
-      throw err;
+      if (!silent) toast(`同步完成：${okCount}/${rooms.length} 个房间，共 ${total} 件`);
     } finally {
       syncing = false;
     }
   }
 
-  $('genRoom').onclick = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let s = '';
-    for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
-    $('s_room').value = s;
-    toast('已生成，记得点「保存并同步」');
-  };
+  async function syncRoom(r, silent) {
+    const base = (db.settings.base || location.origin).replace(/\/$/, '');
+    const url = new URL('/api/sync', base);
+    url.searchParams.set('room', r.code);
+    if (db.settings.token) url.searchParams.set('token', db.settings.token);
 
-  $('saveRoom').onclick = async () => {
-    const v = $('s_room').value.trim().toUpperCase();
-    const g = $('s_roomGroup').value.trim();
-    if (v && !/^[A-Z0-9]{4,12}$/.test(v)) return toast('房间码要 4-12 位字母数字');
-    db.settings.room = v;
-    db.settings.roomGroup = v ? g : '';
-    if (v && g && !db.groups.includes(g)) db.groups.push(g);
-    localStorage.setItem(KEY, JSON.stringify(db));
-    refreshSyncState(); refreshFilters(); render();
-    if (!v) return toast('已清空家庭码');
-    try { await syncNow(false); } catch (e) { /* 错误已提示 */ }
-  };
+    // 分组名为空 → 跟随创建者
+    let group = (r.group || '').trim();
+    if (!group) {
+      try {
+        const info = await fetch(url, { headers: { accept: 'application/json' } }).then((x) => x.json());
+        const serverName = (info && info.roomName || '').trim();
+        if (serverName) {
+          group = serverName;
+          r.group = serverName;
+          if (!db.groups.includes(serverName)) db.groups.push(serverName);
+        }
+      } catch (e) { /* 忽略 */ }
+    }
+    if (!group) throw new Error('这个房间还没有名字');
 
-  $('syncNow').onclick = () => syncNow(false).catch(() => {});
+    const inRoom = (it) => itemInGroup(it, group);
+    const shared = db.items.filter(inRoom);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        items: shared,
+        groups: [group],
+        deleted: db.deleted || {},
+        roomName: group,
+        members: { [db.settings.deviceId]: db.settings.nickname || '' },
+      }),
+    });
+    const j = await res.json().catch(() => ({ ok: false, error: 'HTTP ' + res.status }));
+    if (!j.ok) throw new Error(j.error || 'HTTP ' + res.status);
+    if (j.members && typeof j.members === 'object') r.members = j.members;
+
+    const others = db.items.filter((i) => !inRoom(i));
+    const remote = Array.isArray(j.items) ? j.items : [];
+    db.items = others.concat(remote.map((it) => {
+      const gs = Array.isArray(it.groups) ? it.groups.slice() : (it.group ? [it.group] : []);
+      if (!gs.includes(group)) gs.push(group);
+      return { ...it, groups: gs, group: gs[0] || '' };
+    }));
+    dedupeByNo();
+    return remote.length;
+  }
 
   /* ---------- 账号 ---------- */
   function openAccount() {
     $('accName').value = db.settings.nickname || '';
-    $('accRoom').value = db.settings.room ? (db.settings.room + (db.settings.roomGroup ? '（' + db.settings.roomGroup + '）' : '')) : '';
-    renderMembers();
+    renderRooms();
+    renderSyncState();
     openSheet('accountSheet');
   }
 
-  function renderMembers() {
-    const box = $('accMembers');
+  function renderRooms() {
+    const box = $('accRooms');
     if (!box) return;
-    const members = db.settings.members || {};
-    const ids = Object.keys(members);
-    if (!ids.length) {
-      box.innerHTML = roomCode()
-        ? '还没同步过，保存昵称后点「立即同步」就会看到成员。'
-        : '还没加入家庭码。去设置里填一个，就能和家人共享包裹。';
+    const rooms = db.settings.rooms || [];
+    if (!rooms.length) {
+      box.innerHTML = '还没加入任何家庭码。填一个码，起个分组名，就能和家人共享。';
       return;
     }
-    box.innerHTML = ids.map((id) => {
-      const name = members[id] || '未命名';
-      const me = id === db.settings.deviceId;
-      return `<div>${esc(name)}${me ? ' <span style="color:#9db8ff">（我）</span>' : ''}</div>`;
+    box.innerHTML = rooms.map((r) => {
+      const count = db.items.filter((it) => itemInGroup(it, r.group)).length;
+      const members = Object.values(r.members || {}).filter(Boolean);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
+        <div style="flex:1;min-width:0">
+          <div style="color:#e8eaee">${esc(r.code)} · ${esc(r.group || '跟随命名者')}</div>
+          <div style="font-size:11px;color:var(--dim2)">${count} 件${members.length ? ' · ' + esc(members.join('、')) : ''}</div>
+        </div>
+        <button class="ghost" style="width:auto;margin:0;padding:6px 10px;flex:0 0 auto" data-delroom="${esc(r.code)}">移除</button>
+      </div>`;
     }).join('');
+
+    box.querySelectorAll('[data-delroom]').forEach((b) => {
+      b.onclick = () => {
+        const code = b.dataset.delroom;
+        if (!confirm(`移除家庭码 ${code}？本地包裹不会删，只是不再同步。`)) return;
+        db.settings.rooms = db.settings.rooms.filter((x) => x.code !== code);
+        localStorage.setItem(KEY, JSON.stringify(db));
+        renderRooms(); renderSyncState();
+        toast('已移除');
+      };
+    });
+  }
+
+  function renderSyncState() {
+    const rooms = db.settings.rooms || [];
+    if (!rooms.length) return;
+    if (lastSync) toast(`上次同步 ${relTime(lastSync)}`);
   }
 
   $('accountBtn').onclick = () => openAccount();
@@ -1056,15 +1059,29 @@ main{padding:14px 16px 0}
   $('accSave').onclick = () => {
     const name = $('accName').value.trim();
     db.settings.nickname = name;
-    // 把已经加过的、属于自己的包裹一并改名
     db.items.forEach((it) => {
       if (it.ownerId && it.ownerId === db.settings.deviceId) it.owner = name;
-      else if (!it.ownerId && !it.owner && name) it.owner = ''; // 别人的不动
     });
-    save(); render(); renderMembers();
+    save(); render(); renderRooms();
     toast(name ? '昵称已保存' : '已清空昵称');
-    if (roomCode()) syncNow(true).catch(() => {});
+    if ((db.settings.rooms || []).length) syncNow(true).catch(() => {});
   };
+
+  $('accJoin').onclick = async () => {
+    const code = ($('accRoomCode').value || '').trim().toUpperCase();
+    const group = ($('accRoomGroup').value || '').trim();
+    if (!/^[A-Z0-9]{4,12}$/.test(code)) return toast('家庭码要 4-12 位字母数字');
+    if ((db.settings.rooms || []).some((r) => r.code === code)) return toast('已经加过这个码了');
+    if (group && !db.groups.includes(group)) db.groups.push(group);
+    db.settings.rooms.push({ code, group, members: {} });
+    localStorage.setItem(KEY, JSON.stringify(db));
+    $('accRoomCode').value = ''; $('accRoomGroup').value = '';
+    renderRooms(); refreshFilters(); render();
+    toast('已加入，开始同步…');
+    try { await syncNow(false); } catch (e) { /* 已提示 */ }
+  };
+
+  $('accSync').onclick = () => syncNow(false).catch(() => {});
 
   /* ---------- 分组：首页新建 / 长按改名删除 ---------- */
   let groupEditing = null; // null=新建，否则=原名
