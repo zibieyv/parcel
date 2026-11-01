@@ -375,6 +375,21 @@ public class MainActivity extends Activity implements Bridge.Sink {
             sendBroadcast(new Intent(BallPrefs.ACTION_CHANGED).setPackage(getPackageName()));
         }
 
+        /** 用系统浏览器打开外部链接（百度网盘等） */
+        @JavascriptInterface
+        public void openUrl(String url) {
+            if (url == null || url.isEmpty()) return;
+            runOnUiThread(() -> {
+                try {
+                    Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                } catch (Exception e) {
+                    toast("打不开这个链接");
+                }
+            });
+        }
+
         /** 网页里想重新申请一次截屏授权 */
         @JavascriptInterface
         public void requestCapture() {

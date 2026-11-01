@@ -278,14 +278,17 @@ main{padding:14px 16px 0}
       <p id="accState" style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:10px"></p>
     </div>
 
-    <a href="/apk/parcel-0.32.apk?v=32" download
+    <a href="/apk/parcel-0.33.apk?v=33" download
        style="display:block;text-align:center;margin-top:22px;padding:12px;border-radius:12px;background:var(--card2);border:1px solid var(--line);font-size:14px;color:#c8d0dc;text-decoration:none">
-      下载安卓 App（v0.32，截屏抓单号）
+      下载安卓 App（v0.33，截屏抓单号）
     </a>
 
     <div style="margin-top:22px;display:flex;gap:10px">
       <button class="ghost" id="exportData">导出备份</button>
       <button class="ghost" id="importData">导入备份</button>
+    </div>
+    <div class="field" style="margin-top:22px"><label>百度网盘分享链接（可选）</label>
+      <input id="s_baidu" placeholder="https://pan.baidu.com/s/xxxx">
     </div>
     <p style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:16px">
       数据只存在这台设备的浏览器里，不上传。换手机或清缓存前先导出备份。
@@ -315,6 +318,21 @@ main{padding:14px 16px 0}
 </div>
 
 <input type="file" id="fileInput" accept="application/json" style="display:none">
+
+<!-- 更新方式 -->
+<div class="sheet" id="updateSheet">
+  <div class="panel">
+    <h2><span>选择更新方式</span><button class="x" data-close>关闭</button></h2>
+    <button class="ghost" id="upApp" style="padding:16px;text-align:left">
+      <b style="display:block;font-size:15px">此应用更新</b>
+      <span style="font-size:12px;color:var(--dim)">直接下载安装，带进度条</span>
+    </button>
+    <button class="ghost" id="upBaidu" style="padding:16px;text-align:left;margin-top:10px">
+      <b style="display:block;font-size:15px">百度网盘更新</b>
+      <span style="font-size:12px;color:var(--dim)">跳到网盘下载，适合装不上时用</span>
+    </button>
+  </div>
+</div>
 
 <!-- 账号 -->
 <div class="sheet" id="accountSheet">
@@ -394,7 +412,7 @@ main{padding:14px 16px 0}
     items: [],
     groups: ['我的'],
     deleted: {},
-    settings: { base: location.origin, token: '', rooms: [], nickname: '', deviceId: '', members: {} },
+    settings: { base: location.origin, token: '', rooms: [], nickname: '', deviceId: '', members: {}, baiduUrl: '' },
   };
   let db = load();
   dedupeByNo();
@@ -898,12 +916,14 @@ main{padding:14px 16px 0}
   $('openSettings').onclick = () => {
     $('s_base').value = db.settings.base || location.origin;
     $('s_token').value = db.settings.token || '';
+    if ($('s_baidu')) $('s_baidu').value = db.settings.baiduUrl || '';
     openSheet('setSheet');
   };
 
   $('saveSettings').onclick = () => {
     db.settings.base = $('s_base').value.trim() || location.origin;
     db.settings.token = $('s_token').value.trim();
+    db.settings.baiduUrl = ($('s_baidu') && $('s_baidu').value.trim()) || '';
     save(); toast('设置已保存');
   };
 
@@ -1322,6 +1342,31 @@ main{padding:14px 16px 0}
     }
   };
 
+  let pendingUpdate = null;
+
+  function openUpdateChoice(j) {
+    pendingUpdate = j;
+    openSheet('updateSheet');
+  }
+
+  $('upApp').onclick = () => {
+    closeSheets();
+    const j = pendingUpdate;
+    if (!j) return;
+    showUpdateProgress(0);
+    try { window.Native.installUpdate(j.url); } catch (e) { hideUpdateProgress(); toast('启动下载失败'); }
+  };
+
+  $('upBaidu').onclick = () => {
+    const url = (db.settings.baiduUrl || '').trim();
+    if (!url) { toast('还没设置网盘链接，去 ⚙ 里填一下'); return; }
+    closeSheets();
+    try {
+      if (window.Native && window.Native.openUrl) window.Native.openUrl(url);
+      else window.open(url, '_blank');
+    } catch (e) { toast('打不开网盘链接'); }
+  };
+
   async function checkUpdate(silent) {
     const cur = (window.Native && window.Native.versionCode) ? window.Native.versionCode() : 0;
     if (!cur) { if (!silent) toast('网页版不用更新，刷新即可'); return; }
@@ -1333,10 +1378,7 @@ main{padding:14px 16px 0}
         const bar = $('updateBar');
         bar.innerHTML = `<span>发现新版本 ${esc(j.versionName)}</span><button id="doUpdate">立即更新</button>`;
         bar.style.display = 'flex';
-        $('doUpdate').onclick = () => {
-          showUpdateProgress(0);
-          try { window.Native.installUpdate(j.url); } catch (e) { hideUpdateProgress(); toast('启动下载失败'); }
-        };
+        $('doUpdate').onclick = () => { openUpdateChoice(j); };
         if (!silent) toast(`有新版本 ${j.versionName}`);
       } else if (!silent) {
         toast('已经是最新版（v' + window.Native.version() + '）');
