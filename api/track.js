@@ -235,13 +235,16 @@ const KDN_SHIPPER = {
 };
 
 const KDN_STATE = {
-  0: [20, 'in_transit'],
-  1: [10, 'in_transit'],
-  2: [60, 'exception'],
-  3: [50, 'delivered'],
-  4: [60, 'exception'],
-  5: [40, 'delivering'],
-  6: [60, 'exception'],
+  0: [0, 'notfound'],      // 无轨迹
+  1: [10, 'in_transit'],   // 已揽收
+  2: [20, 'in_transit'],   // 在途中
+  3: [50, 'delivered'],    // 已签收
+  4: [60, 'exception'],    // 问题件
+  5: [40, 'delivering'],   // 派件中
+  6: [60, 'exception'],    // 退回
+  7: [60, 'exception'],    // 转投
+  8: [35, 'in_transit'],   // 清关
+  14: [60, 'exception'],   // 拒签
 };
 
 function kdnSign(json, key) {
