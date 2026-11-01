@@ -129,6 +129,22 @@ const KD100_TYPE = {
   jd: 'jd',
 };
 
+
+// 轨迹文本里出现别的快递品牌名，说明这单被匹配到别家了
+const BRANDS = {
+  yuantong: '\u5706\u901a', zhongtong: '\u4e2d\u901a', yunda: '\u97f5\u8fbe',
+  shentong: '\u7533\u901a', shunfeng: '\u987a\u4e30', jtexpress: '\u6781\u5154',
+  youzhengguonei: '\u90ae\u653f', ems: 'EMS', jd: '\u4eac\u4e1c',
+};
+function brandMismatch(text, type) {
+  const s = String(text || '');
+  for (const k of Object.keys(BRANDS)) {
+    if (k === type) continue;
+    if (s.includes(BRANDS[k])) return true;
+  }
+  return false;
+}
+
 const KD100_STATE = {
   0: [20, 'in_transit'],
   1: [10, 'in_transit'],
@@ -179,6 +195,9 @@ async function queryKuaidi100(no, type) {
   // 这时轨迹属于别的包裹，必须丢掉
   const com = String(json.com || '').toLowerCase();
   if (com && com !== String(type).toLowerCase()) return null;
+
+  const joined = (json.data || []).slice(0, 3).map((e) => e.context || '').join(' ');
+  if (brandMismatch(joined, type)) return null;
 
   const st = KD100_STATE[Number(json.state)] || [20, 'in_transit'];
   const events = json.data.map((e) => ({

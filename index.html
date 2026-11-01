@@ -763,6 +763,22 @@ main{padding:14px 16px 0}
       '&postid=' + encodeURIComponent(no) + '&temp=0.' + String(no).length + '&phone=';
   }
 
+
+// 轨迹文本里出现别的快递品牌名，说明这单被匹配到别家了
+const KD_BRANDS = {
+  yuantong: '\u5706\u901a', zhongtong: '\u4e2d\u901a', yunda: '\u97f5\u8fbe',
+  shentong: '\u7533\u901a', shunfeng: '\u987a\u4e30', jtexpress: '\u6781\u5154',
+  youzhengguonei: '\u90ae\u653f', ems: 'EMS', jd: '\u4eac\u4e1c',
+};
+function brandMismatch(text, type) {
+  const s = String(text || '');
+  for (const k of Object.keys(BRANDS)) {
+    if (k === type) continue;
+    if (s.includes(KD_KD_BRANDS[k])) return true;
+  }
+  return false;
+}
+
   async function queryKuaidi(no, types) {
     const httpGet = window.Native && window.Native.httpGet;
     if (!httpGet) return null;
@@ -776,6 +792,9 @@ main{padding:14px 16px 0}
       // 快递100 可能把单号匹配到别的承运商，com 不一致就是别人的包裹
       const com = String(j.com || '').toLowerCase();
       if (com && com !== t) continue;
+      const joined = (j.data || []).slice(0, 3).map((e) => e.context || '').join(' ');
+      if (brandMismatch(joined, t)) continue;
+
       const st = KD_STATE[Number(j.state)] || ['in_transit', '运输中'];
       const events = j.data.map((e) => ({
         time: e.ftime || e.time || '', text: e.context || '', where: '',
