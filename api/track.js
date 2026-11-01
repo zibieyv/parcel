@@ -64,6 +64,14 @@ function normalizeNo(raw) {
  * 国内单号光靠自动识别经常匹配不到承运商，
  * 这里按前缀/长度给出候选，依次尝试注册。
  */
+function isDomestic(no) {
+  const n = String(no || '').toUpperCase();
+  return /^(YT|ZT|YD|JT|SF)\d{10,}/.test(n)
+    || /^JD[A-Z0-9]{10,}/.test(n)
+    || /^9[1-8]\d{11}$/.test(n)
+    || /^\d{12,15}$/.test(n);
+}
+
 function carrierCandidates(no) {
   const n = no.toUpperCase();
   const out = [];
@@ -155,7 +163,7 @@ async function queryKuaidi100(no, type) {
     time: e.ftime || e.time || '',
     text: e.context || '',
     where: '',
-  })).filter((e) => e.text);
+  })).filter((e) => e.text && !/查无|暂无|无记录|查询无结果|单号不存在|请稍后/.test(e.text));
 
   return {
     code: st[0],
@@ -231,8 +239,11 @@ module.exports = async function handler(req, res) {
     let lastReason = '暂无轨迹';
     const debug = [];
 
+    // 国内单号直接跳过 17TRACK：它对国内承运商要么没数据，要么匹配到别的单
+    const domestic = isDomestic(no);
+
     // 先试无承运商（国际单号多半能自动识别）
-    const tries = [null, ...candidates];
+    const tries = domestic ? [] : [null, ...candidates];
     for (const carrier of tries) {
       let regErr = '';
       try {
