@@ -819,6 +819,14 @@ function brandMismatch(text, type) {
     if (types && window.Native && window.Native.httpGet) {
       const kd = await queryKuaidi(no, types, phoneTail);
       if (kd) return kd;
+      // 指定承运商查不到时，回退到自动候选再试一轮
+      if (forced) {
+        const auto = (domesticTypes(no) || []).filter((t) => t !== forced);
+        if (auto.length) {
+          const kd2 = await queryKuaidi(no, auto, phoneTail);
+          if (kd2) return kd2;
+        }
+      }
     }
     if (forced && !window.Native) types = [forced];
     const base = (db.settings.base || location.origin).replace(/\/$/, '');
