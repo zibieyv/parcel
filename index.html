@@ -412,7 +412,7 @@ main{padding:14px 16px 0}
     items: [],
     groups: ['我的'],
     deleted: {},
-    settings: { base: location.origin, token: '', rooms: [], nickname: '', deviceId: '', members: {}, baiduUrl: '' },
+    settings: { base: location.origin, token: '', rooms: [], nickname: '', deviceId: '', members: {}, baiduUrl: 'https://pan.baidu.com/s/1WmPTGTfd5_UFzq4VnErjOg?pwd=7m8w' },
   };
   let db = load();
   dedupeByNo();
@@ -480,6 +480,7 @@ main{padding:14px 16px 0}
             st.rooms = [{ code: st.room, group: st.roomGroup || '', members: st.members || {} }];
           }
           st.rooms.forEach((r) => { if (!r.members) r.members = {}; });
+          if (!st.baiduUrl) st.baiduUrl = defaults.settings.baiduUrl;
           delete st.room; delete st.roomGroup;
           return st;
         })(),
@@ -1360,7 +1361,12 @@ main{padding:14px 16px 0}
   $('upBaidu').onclick = () => {
     const url = (db.settings.baiduUrl || '').trim();
     if (!url) { toast('还没设置网盘链接，去 ⚙ 里填一下'); return; }
+    const m = url.match(/[?&]pwd=([A-Za-z0-9]{4})/);
     closeSheets();
+    if (m) {
+      try { navigator.clipboard.writeText(m[1]); } catch (e) {}
+      toast(`提取码 ${m[1]} 已复制，网盘里粘一下`);
+    }
     try {
       if (window.Native && window.Native.openUrl) window.Native.openUrl(url);
       else window.open(url, '_blank');
