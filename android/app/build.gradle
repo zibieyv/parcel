@@ -10,8 +10,8 @@ android {
         applicationId 'com.zibieyv.parcel'
         minSdk 26
         targetSdk 34
-        versionCode 30
-        versionName '0.30'
+        versionCode 31
+        versionName '0.31'
 
         // 只保留手机实际使用的两种 ARM 架构，OCR 模型库体积能少一半
         ndk {

@@ -179,6 +179,12 @@ public class ScreenService extends Service {
         capW = Math.max(1, Math.round(screenW * scale));
         capH = Math.max(1, Math.round(screenH * scale));
 
+        if (BallPrefs.isEnabled(this)) ensureCapture();
+    }
+
+    /** 只在悬浮球显示时才建屏；球关掉就拆，彻底不读屏 */
+    private void ensureCapture() {
+        if (projection == null || captureDisplay != null) return;
         try {
             captureReader = ImageReader.newInstance(capW, capH, PixelFormat.RGBA_8888, 2);
             captureDisplay = projection.createVirtualDisplay(
@@ -363,6 +369,7 @@ public class ScreenService extends Service {
             return;
         }
         setExpanded(true);
+        ensureCapture();
     }
 
     private LinearLayout buildHintCard() {
@@ -460,6 +467,7 @@ public class ScreenService extends Service {
         cardView = null;
         cardIcon = null;
         ballVisible = false;
+        teardownCapture();
     }
 
     private void clamp() {
