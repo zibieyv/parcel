@@ -168,15 +168,16 @@ public class ScreenService extends Service {
         projection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
-                toast("截屏授权已结束，重新打开 App 授权一次");
-                stopSelf();
+                // 部分 ROM 在释放虚拟屏时会误触发这里，所以只标记失效，不停服务
+                projection = null;
+                toast("截屏授权已结束，点球时会让你重新授权");
             }
         }, ui);
     }
 
     private void captureAndRecognize() {
         if (projection == null) {
-            toast("还没拿到截屏授权，打开 App 授权一次");
+            toast("需要重新授一次截屏，正在打开 App…");
             openApp();
             return;
         }

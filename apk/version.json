@@ -1,6 +1,6 @@
 {
-  "versionCode": 27,
-  "versionName": "0.27",
-  "url": "/apk/parcel-0.27.apk?v=27",
-  "notes": "截屏改为按需建屏，不再常驻发热"
+  "versionCode": 28,
+  "versionName": "0.28",
+  "url": "/apk/parcel-0.28.apk?v=28",
+  "notes": "修复识别后悬浮球消失"
 }
