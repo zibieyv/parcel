@@ -232,6 +232,20 @@ main{padding:14px 16px 0}
     </div>
     <div class="field"><label>取件码（大多留空，到站会自动填）</label><input id="f_pickup" placeholder="6-4-12003"></div>
     <div class="field"><label>备注（可留空）</label><textarea id="f_note" placeholder="放哪个驿站 / 给谁的 / 多少钱"></textarea></div>
+    <div class="field"><label>承运商（查不到轨迹时手动指定）</label>
+      <select id="f_carrier">
+        <option value="">自动识别</option>
+        <option value="yuantong">圆通</option>
+        <option value="zhongtong">中通</option>
+        <option value="yunda">韵达</option>
+        <option value="shentong">申通</option>
+        <option value="jtexpress">极兔</option>
+        <option value="shunfeng">顺丰</option>
+        <option value="youzhengguonei">邮政快递包裹</option>
+        <option value="ems">EMS</option>
+        <option value="jd">京东</option>
+      </select>
+    </div>
     <button class="primary" id="saveItem">保存</button>
     <button class="ghost danger" id="delItem" style="display:none">删除这个包裹</button>
   </div>
@@ -776,15 +790,18 @@ main{padding:14px 16px 0}
     return null;
   }
 
-  async function queryTrack(no) {
-    const types = domesticTypes(no);
+  async function queryTrack(no, forcedCarrier) {
+    const forced = (forcedCarrier || '').trim();
+    let types = forced ? [forced] : domesticTypes(no);
     if (types && window.Native && window.Native.httpGet) {
       const kd = await queryKuaidi(no, types);
       if (kd) return kd;
     }
+    if (forced && !window.Native) types = [forced];
     const base = (db.settings.base || location.origin).replace(/\/$/, '');
     const url = new URL('/api/track', base);
     url.searchParams.set('no', no);
+    if (forced) url.searchParams.set('carrier', forced);
     if (db.settings.token) url.searchParams.set('token', db.settings.token);
     const r = await fetch(url, { headers: { accept: 'application/json' } });
     const j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
@@ -809,7 +826,7 @@ main{padding:14px 16px 0}
     if (!it.no) return toast('这单没有单号');
     if (btn) { btn.disabled = true; btn.textContent = '查询中…'; }
     try {
-      const j = await queryTrack(it.no);
+      const j = await queryTrack(it.no, it.carrierCode);
       applyTrack(it, j);
       save(); render();
       toast(j.status === 'notfound' ? '还没轨迹，晚点再刷' : '已更新');
@@ -833,7 +850,7 @@ main{padding:14px 16px 0}
     if (!silent) toast(`刷新 ${list.length} 件…`);
     for (const it of list) {
       try {
-        applyTrack(it, await queryTrack(it.no));
+        applyTrack(it, await queryTrack(it.no, it.carrierCode));
       } catch { /* 单条失败不影响其他 */ }
     }
     save(); render();
@@ -859,7 +876,7 @@ main{padding:14px 16px 0}
     toast(`自动刷新 ${list.length} 件…`);
     for (const it of list) {
       try {
-        applyTrack(it, await queryTrack(it.no));
+        applyTrack(it, await queryTrack(it.no, it.carrierCode));
         save();
       } catch { /* 忽略单条失败 */ }
     }
@@ -907,6 +924,7 @@ main{padding:14px 16px 0}
     fillGroupPicker();
     $('f_pickup').value = it?.pickup || '';
     $('f_note').value = it?.note || '';
+    if ($('f_carrier')) $('f_carrier').value = it?.carrierCode || '';
     $('delItem').style.display = it ? 'block' : 'none';
     openSheet('editSheet');
   }
@@ -925,6 +943,7 @@ main{padding:14px 16px 0}
       group: groups[0] || '',
       pickup: $('f_pickup').value.trim(),
       note: $('f_note').value.trim(),
+      carrierCode: ($('f_carrier') && $('f_carrier').value) || '',
     };
     if (editing) {
       Object.assign(editing, data);
