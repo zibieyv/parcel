@@ -232,6 +232,9 @@ main{padding:14px 16px 0}
     </div>
     <div class="field"><label>取件码（大多留空，到站会自动填）</label><input id="f_pickup" placeholder="6-4-12003"></div>
     <div class="field"><label>备注（可留空）</label><textarea id="f_note" placeholder="放哪个驿站 / 给谁的 / 多少钱"></textarea></div>
+    <div class="field"><label>收件手机尾号（邮政/EMS 必填，4 位）</label>
+      <input id="f_phone" inputmode="numeric" maxlength="4" placeholder="比如 1234">
+    </div>
     <div class="field"><label>承运商（查不到轨迹时手动指定）</label>
       <select id="f_carrier">
         <option value="">自动识别</option>
@@ -758,9 +761,10 @@ main{padding:14px 16px 0}
     return null;
   }
 
-  function kdUrl(no, type) {
+  function kdUrl(no, type, phone) {
     return 'https://www.kuaidi100.com/query?type=' + encodeURIComponent(type) +
-      '&postid=' + encodeURIComponent(no) + '&temp=0.' + String(no).length + '&phone=';
+      '&postid=' + encodeURIComponent(no) + '&temp=0.' + String(no).length +
+      '&phone=' + encodeURIComponent(phone || '');
   }
 
 
@@ -779,12 +783,12 @@ function brandMismatch(text, type) {
   return false;
 }
 
-  async function queryKuaidi(no, types) {
+  async function queryKuaidi(no, types, phone) {
     const httpGet = window.Native && window.Native.httpGet;
     if (!httpGet) return null;
     for (const t of types) {
       let body = '';
-      try { body = httpGet(kdUrl(no, t)); } catch (e) { continue; }
+      try { body = httpGet(kdUrl(no, t, phone)); } catch (e) { continue; }
       if (!body) continue;
       let j;
       try { j = JSON.parse(body); } catch (e) { continue; }
@@ -809,11 +813,11 @@ function brandMismatch(text, type) {
     return null;
   }
 
-  async function queryTrack(no, forcedCarrier) {
+  async function queryTrack(no, forcedCarrier, phoneTail) {
     const forced = (forcedCarrier || '').trim();
     let types = forced ? [forced] : domesticTypes(no);
     if (types && window.Native && window.Native.httpGet) {
-      const kd = await queryKuaidi(no, types);
+      const kd = await queryKuaidi(no, types, phoneTail);
       if (kd) return kd;
     }
     if (forced && !window.Native) types = [forced];
@@ -821,6 +825,7 @@ function brandMismatch(text, type) {
     const url = new URL('/api/track', base);
     url.searchParams.set('no', no);
     if (forced) url.searchParams.set('carrier', forced);
+    if (phoneTail) url.searchParams.set('phone', phoneTail);
     if (db.settings.token) url.searchParams.set('token', db.settings.token);
     const r = await fetch(url, { headers: { accept: 'application/json' } });
     const j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
@@ -845,7 +850,7 @@ function brandMismatch(text, type) {
     if (!it.no) return toast('这单没有单号');
     if (btn) { btn.disabled = true; btn.textContent = '查询中…'; }
     try {
-      const j = await queryTrack(it.no, it.carrierCode);
+      const j = await queryTrack(it.no, it.carrierCode, it.phoneTail);
       applyTrack(it, j);
       save(); render();
       toast(j.status === 'notfound' ? '还没轨迹，晚点再刷' : '已更新');
@@ -869,7 +874,7 @@ function brandMismatch(text, type) {
     if (!silent) toast(`刷新 ${list.length} 件…`);
     for (const it of list) {
       try {
-        applyTrack(it, await queryTrack(it.no, it.carrierCode));
+        applyTrack(it, await queryTrack(it.no, it.carrierCode, it.phoneTail));
       } catch { /* 单条失败不影响其他 */ }
     }
     save(); render();
@@ -895,7 +900,7 @@ function brandMismatch(text, type) {
     toast(`自动刷新 ${list.length} 件…`);
     for (const it of list) {
       try {
-        applyTrack(it, await queryTrack(it.no, it.carrierCode));
+        applyTrack(it, await queryTrack(it.no, it.carrierCode, it.phoneTail));
         save();
       } catch { /* 忽略单条失败 */ }
     }
@@ -944,6 +949,7 @@ function brandMismatch(text, type) {
     $('f_pickup').value = it?.pickup || '';
     $('f_note').value = it?.note || '';
     if ($('f_carrier')) $('f_carrier').value = it?.carrierCode || '';
+    if ($('f_phone')) $('f_phone').value = it?.phoneTail || '';
     $('delItem').style.display = it ? 'block' : 'none';
     openSheet('editSheet');
   }
@@ -963,6 +969,7 @@ function brandMismatch(text, type) {
       pickup: $('f_pickup').value.trim(),
       note: $('f_note').value.trim(),
       carrierCode: ($('f_carrier') && $('f_carrier').value) || '',
+      phoneTail: (($('f_phone') && $('f_phone').value) || '').replace(/\D/g, '').slice(0, 4),
     };
     if (editing) {
       Object.assign(editing, data);
