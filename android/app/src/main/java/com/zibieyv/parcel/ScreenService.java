@@ -65,6 +65,7 @@ public class ScreenService extends Service {
 
     private WindowManager wm;
     private LinearLayout ballBox;
+    private TextView pillView;
     private ImageView ballView;
     private ImageView cardIcon;
     private LinearLayout cardView;
@@ -256,6 +257,7 @@ public class ScreenService extends Service {
         ballBox.setGravity(Gravity.START);
 
         TextView pill = new TextView(this);
+        pillView = pill;
         pill.setText("‹ 返回软件");
         pill.setTextSize(9.5f);
         pill.setSingleLine(true);
@@ -399,7 +401,7 @@ public class ScreenService extends Service {
     private final Runnable collapseTask = () -> setExpanded(false);
 
     private void handleTap(float rawX, float rawY) {
-        View[] targets = new View[]{ballView, cardIcon, cardView};
+        View[] targets = new View[]{pillView, ballView, cardIcon, cardView};
         for (View v : targets) {
             if (v == null || !v.isShown()) continue;
             int[] loc = new int[2];
@@ -407,7 +409,9 @@ public class ScreenService extends Service {
             Rect r = new Rect(loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight());
             if (!r.contains((int) rawX, (int) rawY)) continue;
 
-            if (v == ballView) {
+            if (v == pillView) {
+                openApp();
+            } else if (v == ballView) {
                 setExpanded(true);
             } else if (v == cardIcon) {
                 captureAndRecognize();
@@ -416,9 +420,6 @@ public class ScreenService extends Service {
             }
             return;
         }
-        // 没命中球/卡片，落在顶部那条「返回软件」上
-        float localY = rawY - ballParams.y;
-        if (localY <= dp(28)) openApp();
     }
 
     private void hideBall() {
@@ -426,6 +427,7 @@ public class ScreenService extends Service {
             try { wm.removeView(ballBox); } catch (Exception ignored) {}
         }
         ballBox = null;
+        pillView = null;
         ballView = null;
         cardView = null;
         cardIcon = null;
@@ -539,9 +541,21 @@ public class ScreenService extends Service {
     /* ---------------- 杂项 ---------------- */
 
     private void openApp() {
-        Intent i = new Intent(this, MainActivity.class);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        startActivity(i);
+        Intent i = new Intent(this, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        // 安卓 14 会拦截服务里的 startActivity，用 PendingIntent 让系统代发
+        try {
+            PendingIntent pi = PendingIntent.getActivity(this, 1001, i,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            pi.send();
+            return;
+        } catch (Exception ignored) {
+        }
+        try {
+            startActivity(i);
+        } catch (Exception e) {
+            toast("打不开 App：" + e.getMessage());
+        }
     }
 
     private Drawable roundedBall(int sizePx) {

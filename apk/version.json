@@ -1,6 +1,6 @@
 {
-  "versionCode": 25,
-  "versionName": "0.25",
-  "url": "/apk/parcel-0.25.apk?v=25",
-  "notes": "OCR 纠错：O/0、I/1、S/5 混认也能认出单号"
+  "versionCode": 26,
+  "versionName": "0.26",
+  "url": "/apk/parcel-0.26.apk?v=26",
+  "notes": "修复「返回软件」点不动"
 }
