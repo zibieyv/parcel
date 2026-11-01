@@ -9,11 +9,20 @@ import time
 import urllib.error
 import urllib.request
 
-PROXY = "http://127.0.0.1:7897"
+def _proxy_alive():
+    import socket
+    try:
+        socket.create_connection(("127.0.0.1", 7897), timeout=1).close()
+        return True
+    except Exception:
+        return False
+
+
+PROXY = "http://127.0.0.1:7897" if _proxy_alive() else None
 REPO = "zibieyv/parcel"
 TOKEN = os.environ.get("GH_TOKEN", "")
 API = urllib.request.build_opener(
-    urllib.request.ProxyHandler({"http": PROXY, "https": PROXY})
+    urllib.request.ProxyHandler({"http": PROXY, "https": PROXY} if PROXY else {})
 )
 DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -24,7 +33,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 NOREDIR = urllib.request.build_opener(
-    urllib.request.ProxyHandler({"http": PROXY, "https": PROXY}), NoRedirect
+    urllib.request.ProxyHandler({"http": PROXY, "https": PROXY} if PROXY else {}), NoRedirect
 )
 
 
