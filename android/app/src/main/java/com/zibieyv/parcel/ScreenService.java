@@ -196,14 +196,34 @@ public class ScreenService extends Service {
         }
     }
 
+    private long captureStartNs = 0;
+
     private void captureAndRecognize() {
-        if (projection == null || captureDisplay == null || captureReader == null) {
+        if (projection == null) {
             toast("需要重新授一次截屏，正在打开 App…");
             openApp();
             return;
         }
+        if (captureDisplay == null || captureReader == null) ensureCapture();
+        if (captureDisplay == null || captureReader == null) {
+            toast("截屏通道没准备好，再点一次");
+            return;
+        }
         toast("识别中…");
+
+        // 先把积压的旧帧丢干净，再等一帧"开始采集之后"的新画面
+        drainOldFrames();
+        captureStartNs = android.os.SystemClock.elapsedRealtimeNanos();
         grabFrame(0);
+    }
+
+    private void drainOldFrames() {
+        for (int i = 0; i < 6; i++) {
+            Image old = null;
+            try { old = captureReader.acquireLatestImage(); } catch (Exception ignored) {}
+            if (old == null) break;
+            try { old.close(); } catch (Exception ignored) {}
+        }
     }
 
     private void grabFrame(int tries) {
@@ -212,12 +232,22 @@ public class ScreenService extends Service {
             image = captureReader.acquireLatestImage();
         } catch (Exception ignored) {}
 
-        if (image == null && tries < 15) {
-            ui.postDelayed(() -> grabFrame(tries + 1), 80);
+        if (image == null) {
+            if (tries < 25) {
+                ui.postDelayed(() -> grabFrame(tries + 1), 70);
+            } else {
+                toast("画面还没准备好，再点一次");
+            }
             return;
         }
-        if (image == null) {
-            toast("画面还没准备好，再点一次");
+
+        // 时间戳比"开始采集"还旧 → 这是积压帧，扔掉重来
+        long ts = 0;
+        try { ts = image.getTimestamp(); } catch (Exception ignored) {}
+        boolean stale = ts > 0 && captureStartNs > 0 && ts < captureStartNs;
+        if (stale && tries < 10) {
+            try { image.close(); } catch (Exception ignored) {}
+            ui.postDelayed(() -> grabFrame(tries + 1), 70);
             return;
         }
 
@@ -239,6 +269,13 @@ public class ScreenService extends Service {
         }
         if (bmp == null) return;
 
+        // 全黑/全同色的空画面，重试一帧
+        if (isBlank(bmp) && tries < 14) {
+            recycle(bmp);
+            ui.postDelayed(() -> grabFrame(tries + 1), 90);
+            return;
+        }
+
         final Bitmap target = bmp;
         recognizer.process(InputImage.fromBitmap(target, 0))
                 .addOnSuccessListener(result -> {
@@ -259,12 +296,19 @@ public class ScreenService extends Service {
                 });
     }
 
-    /** 拆掉一切（只在服务销毁时调用） */
-    private void teardownCapture() {
-        try { if (captureDisplay != null) captureDisplay.release(); } catch (Exception ignored) {}
-        captureDisplay = null;
-        try { if (captureReader != null) captureReader.close(); } catch (Exception ignored) {}
-        captureReader = null;
+    /** 抽几个点看是不是一片纯色（黑屏/白屏） */
+    private boolean isBlank(Bitmap b) {
+        try {
+            int w = b.getWidth(), h = b.getHeight();
+            int first = b.getPixel(w / 4, h / 4);
+            int[][] pts = {{w / 2, h / 2}, {w * 3 / 4, h / 4}, {w / 4, h * 3 / 4}, {w * 3 / 4, h * 3 / 4}};
+            for (int[] p : pts) {
+                if (b.getPixel(p[0], p[1]) != first) return false;
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private void recycle(Bitmap b) {
