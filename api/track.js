@@ -143,14 +143,31 @@ const KD100_STATE = {
 };
 
 /** 走快递100的公开查询接口，国内单号命中率比 17TRACK 高得多 */
+let kdCookie = '';
+async function ensureKdCookie() {
+  if (kdCookie) return kdCookie;
+  try {
+    const r = await fetch('https://www.kuaidi100.com/', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36' },
+    });
+    const raw = r.headers.get('set-cookie') || '';
+    kdCookie = raw.split(/,(?=[^ ;]+=)/).map((c) => c.split(';')[0]).join('; ');
+  } catch (e) {
+    kdCookie = '';
+  }
+  return kdCookie;
+}
+
 async function queryKuaidi100(no, type) {
   const temp = '0.' + String(no).length;
   const url = `https://www.kuaidi100.com/query?type=${encodeURIComponent(type)}&postid=${encodeURIComponent(no)}&temp=${temp}&phone=`;
+  const cookie = await ensureKdCookie();
   const res = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
       'Referer': 'https://www.kuaidi100.com/',
       'Accept': 'application/json, text/plain, */*',
+      ...(cookie ? { Cookie: cookie } : {}),
     },
   });
   const text = await res.text();
