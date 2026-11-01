@@ -108,6 +108,7 @@ main{padding:14px 16px 0}
 .title b{display:block;font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .title b .nt{font-weight:400;font-size:13px;color:var(--dim)}
 .title .nm{font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.owner{display:inline-block;font-size:11px;font-weight:400;color:#9db8ff;background:#1b2740;border:1px solid #2f4d85;border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
 .title .nt2{font-size:12px;color:var(--dim);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bodyRow{display:flex;gap:12px;margin-top:12px;align-items:flex-start}
 .leftCol{flex:0 0 96px;min-width:0}
@@ -192,6 +193,7 @@ main{padding:14px 16px 0}
     <div style="display:flex;gap:8px">
       <button class="ball-pill" id="ballBtn" title="悬浮球" style="display:none"><i id="ballDot">◉</i><span>悬浮球</span></button>
       <button class="icon-btn" id="refreshAll" title="全部刷新">↻</button>
+      <button class="icon-btn" id="accountBtn" title="账号">👤</button>
       <button class="icon-btn" id="openSettings" title="设置">⚙</button>
     </div>
   </div>
@@ -323,6 +325,24 @@ main{padding:14px 16px 0}
 
 <input type="file" id="fileInput" accept="application/json" style="display:none">
 
+<!-- 账号 -->
+<div class="sheet" id="accountSheet">
+  <div class="panel">
+    <h2><span>我的账号</span><button class="x" data-close>关闭</button></h2>
+    <div class="field"><label>昵称（家人看到的就是这个）</label><input id="accName" placeholder="比如：小李"></div>
+    <button class="primary" id="accSave">保存昵称</button>
+
+    <div style="margin-top:22px">
+      <div class="field"><label>家庭码</label><input id="accRoom" readonly placeholder="还没加入"></div>
+      <div class="field"><label>家庭成员</label></div>
+      <div id="accMembers" style="font-size:13px;color:var(--dim);line-height:1.9"></div>
+    </div>
+    <p style="font-size:12px;color:var(--dim2);line-height:1.7;margin-top:14px">
+      昵称只用来在包裹上标"是谁的"，不涉及任何账号密码。
+    </p>
+  </div>
+</div>
+
 <!-- 权限确认 -->
 <div class="sheet" id="permSheet">
   <div class="panel">
@@ -378,7 +398,7 @@ main{padding:14px 16px 0}
     items: [],
     groups: ['我的'],
     deleted: {},
-    settings: { base: location.origin, token: '', room: '', roomGroup: '' },
+    settings: { base: location.origin, token: '', room: '', roomGroup: '', nickname: '', deviceId: '', members: {} },
   };
   let db = load();
   dedupeByNo();
@@ -612,7 +632,7 @@ main{padding:14px 16px 0}
             ? '<i>默认</i><i>其他</i>'
             : esc(PLATFORM_NAME[it.platform] || '默认')}</span>
           <div class="title">
-            <b class="nm">${esc(it.name || it.no || '未命名')}</b>
+            <b class="nm">${esc(it.name || it.no || '未命名')}${it.owner ? `<span class="owner">${esc(it.owner)}</span>` : ''}</b>
             ${note ? `<div class="nt2">备注：${esc(note)}</div>` : ''}
             ${it.no ? `<div class="no">${esc(it.no)}</div>` : ''}
           </div>
@@ -826,7 +846,10 @@ main{padding:14px 16px 0}
       editing.updatedAt = new Date().toISOString();
     } else {
       db.items.unshift({
-        id: uid(), ...data, status: 'pending', statusText: '', carrier: '',
+        id: uid(), ...data,
+        owner: db.settings.nickname || '',
+        ownerId: db.settings.deviceId || '',
+        status: 'pending', statusText: '', carrier: '',
         latest: '', latestTime: '', events: [], createdAt: new Date().toISOString(),
       });
     }
@@ -950,10 +973,12 @@ main{padding:14px 16px 0}
           groups: roomGroup ? [roomGroup] : [],
           deleted: db.deleted || {},
           roomName: roomGroup || '',
+          members: { [db.settings.deviceId]: db.settings.nickname || '' },
         }),
       });
       const j = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
       if (!j.ok) throw new Error(j.error || 'HTTP ' + r.status);
+      if (j.members && typeof j.members === 'object') db.settings.members = j.members;
 
       // 只替换该分组的包裹，其他分组原样保留
       const others = db.items.filter((i) => !inRoom(i));
@@ -999,6 +1024,47 @@ main{padding:14px 16px 0}
   };
 
   $('syncNow').onclick = () => syncNow(false).catch(() => {});
+
+  /* ---------- 账号 ---------- */
+  function openAccount() {
+    $('accName').value = db.settings.nickname || '';
+    $('accRoom').value = db.settings.room ? (db.settings.room + (db.settings.roomGroup ? '（' + db.settings.roomGroup + '）' : '')) : '';
+    renderMembers();
+    openSheet('accountSheet');
+  }
+
+  function renderMembers() {
+    const box = $('accMembers');
+    if (!box) return;
+    const members = db.settings.members || {};
+    const ids = Object.keys(members);
+    if (!ids.length) {
+      box.innerHTML = roomCode()
+        ? '还没同步过，保存昵称后点「立即同步」就会看到成员。'
+        : '还没加入家庭码。去设置里填一个，就能和家人共享包裹。';
+      return;
+    }
+    box.innerHTML = ids.map((id) => {
+      const name = members[id] || '未命名';
+      const me = id === db.settings.deviceId;
+      return `<div>${esc(name)}${me ? ' <span style="color:#9db8ff">（我）</span>' : ''}</div>`;
+    }).join('');
+  }
+
+  $('accountBtn').onclick = () => openAccount();
+
+  $('accSave').onclick = () => {
+    const name = $('accName').value.trim();
+    db.settings.nickname = name;
+    // 把已经加过的、属于自己的包裹一并改名
+    db.items.forEach((it) => {
+      if (it.ownerId && it.ownerId === db.settings.deviceId) it.owner = name;
+      else if (!it.ownerId && !it.owner && name) it.owner = ''; // 别人的不动
+    });
+    save(); render(); renderMembers();
+    toast(name ? '昵称已保存' : '已清空昵称');
+    if (roomCode()) syncNow(true).catch(() => {});
+  };
 
   /* ---------- 分组：首页新建 / 长按改名删除 ---------- */
   let groupEditing = null; // null=新建，否则=原名
@@ -1428,6 +1494,11 @@ main{padding:14px 16px 0}
   })();
 
   /* ---------- 启动 ---------- */
+  if (!db.settings.deviceId) {
+    db.settings.deviceId = uid();
+    localStorage.setItem(KEY, JSON.stringify(db));
+  }
+
   refreshFilters();
   render();
   if (!db.settings.token) {

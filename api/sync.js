@@ -95,6 +95,7 @@ module.exports = async function handler(req, res) {
         ok: true,
         rev: prev?.rev || 0,
         roomName: prev?.roomName || '',
+        members: prev?.members || {},
         items: prev?.items || [],
         groups: prev?.groups || [],
         updatedAt: prev?.updatedAt || null,
@@ -115,6 +116,9 @@ module.exports = async function handler(req, res) {
       deleted: body.deleted && typeof body.deleted === 'object' ? body.deleted : {},
     });
 
+    // 成员表：设备ID -> 昵称，后加入的覆盖旧的
+    merged.members = { ...((prev && prev.members) || {}), ...(body.members && typeof body.members === 'object' ? body.members : {}) };
+
     // 房间名以第一次创建时为准，后来的人跟随，不再各写各的
     const wanted = String(body.roomName || '').trim().slice(0, 20);
     merged.roomName = (prev && prev.roomName) || wanted || '';
@@ -126,6 +130,7 @@ module.exports = async function handler(req, res) {
       ok: true,
       rev: merged.rev,
       roomName: merged.roomName,
+      members: merged.members,
       items: merged.items,
       groups: merged.groups,
       updatedAt: merged.updatedAt,
