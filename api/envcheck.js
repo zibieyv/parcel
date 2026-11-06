@@ -4,6 +4,7 @@
  * 只报环境变量的「名字是否存在」，不返回任何值，方便排查配置问题。
  */
 
+// webhook probe
 module.exports = async function handler(req, res) {
   const names = [
     'UPSTASH_REDIS_REST_URL',
