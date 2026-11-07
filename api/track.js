@@ -219,6 +219,59 @@ async function queryKuaidi100(no, type, phone) {
 }
 
 
+
+/* ---------------- 快递100 官方实时查询（正式API，100次/2年） ---------------- */
+const KD100_OFFICIAL_STATE = {
+  0: [20, 'in_transit'],
+  1: [10, 'in_transit'],
+  2: [60, 'exception'],
+  3: [50, 'delivered'],
+  4: [60, 'exception'],
+  5: [40, 'delivering'],
+  6: [60, 'exception'],
+  7: [60, 'exception'],
+  8: [35, 'in_transit'],
+  14: [60, 'exception'],
+};
+
+async function queryKd100Official(no, com, phone) {
+  const customer = process.env.KUAIDI100_CUSTOMER;
+  const key = process.env.KUAIDI100_KEY;
+  if (!customer || !key) return null;
+
+  const param = JSON.stringify({ com, num: no, phone: phone || '', resultv2: '4', show: '0' });
+  const sign = crypto.createHash('md5').update(param + key + customer, 'utf8').digest('hex').toUpperCase();
+  const body = new URLSearchParams({ customer, sign, param });
+
+  const res = await fetch('https://poll.kuaidi100.com/poll/query.do', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { return null; }
+  if (String(json.status) !== '200' || !Array.isArray(json.data) || !json.data.length) return null;
+
+  const st = KD100_OFFICIAL_STATE[Number(json.state)] || [20, 'in_transit'];
+  const events = json.data.map((e) => ({
+    time: e.ftime || e.time || '',
+    text: e.context || '',
+    where: '',
+  })).filter((e) => e.text).reverse();
+
+  return {
+    code: st[0],
+    status: st[1],
+    statusText: events[0]?.text?.slice(0, 20) || '',
+    latest: events[0]?.text || '',
+    latestTime: events[0]?.time || '',
+    carrier: com,
+    events: events.slice(0, 40),
+    source: 'kuaidi100-official',
+  };
+}
+
 /* ---------------- 快递鸟（正规接口，按单号+手机查，不串号） ---------------- */
 const crypto = require('crypto');
 
@@ -414,7 +467,22 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // 快递鸟没有时，再退到快递100
+    // 快递鸟没有（或额度用完）时，用快递100 官方 API
+    if (!info && domestic) {
+      const codes = (forced ? [forced] : carrierCandidates(no)).filter((c) => KD100_TYPE[c]);
+      const list = codes.length ? codes : ['youzhengguonei', 'yuantong', 'zhongtong', 'yunda'];
+      for (const com of [...new Set(list)].slice(0, 3)) {
+        try {
+          const kd = await queryKd100Official(no, com, phoneTail);
+          debug.push({ kd100official: com, hit: !!(kd && kd.events.length) });
+          if (kd && kd.events.length) { info = kd; break; }
+        } catch (e) {
+          debug.push({ kd100official: com, err: String((e && e.message) || e).slice(0, 80) });
+        }
+      }
+    }
+
+    // 再退到快递100 网页接口
     if (!info) {
       const types = (forced ? [forced] : carrierCandidates(no)).map((c) => KD100_TYPE[c]).filter(Boolean);
       const tryTypes = types.length ? types : ['yunda', 'zhongtong', 'yuantong', 'shentong', 'youzhengguonei'];
