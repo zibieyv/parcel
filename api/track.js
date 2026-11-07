@@ -414,6 +414,8 @@ module.exports = async function handler(req, res) {
     let info = null;
     let lastReason = '暂无轨迹';
     const debug = [];
+    const tried = [];
+    const mark = (provider, ok, reason) => tried.push({ provider, ok, reason: String(reason || '').slice(0, 60) });
 
     // 国内单号直接跳过 17TRACK：它对国内承运商要么没数据，要么匹配到别的单
     const domestic = isDomestic(no);
@@ -445,8 +447,10 @@ module.exports = async function handler(req, res) {
 
       if (got && (got.events.length > 0 || got.code > 0)) {
         info = got;
+        mark('17TRACK', true, '');
         break;
       }
+      mark('17TRACK', false, carrier ? '无数据(' + carrier + ')' : '无数据');
 
       const rej = rejected.find((r) => normalizeNo(r.number) === no);
       if (rej && rej.reason) lastReason = String(rej.reason);
@@ -461,9 +465,12 @@ module.exports = async function handler(req, res) {
         try {
           const kdn = await queryKdn(no, code, phoneTail);
           debug.push({ kdn: code, hit: !!(kdn && kdn.events.length) });
-          if (kdn && kdn.events.length) { info = kdn; break; }
+          if (kdn && kdn.events.length) { info = kdn; mark('快递鸟', true, ''); break; }
+          mark('快递鸟', false, '无数据(' + code + ')');
         } catch (e) {
-          debug.push({ kdn: code, err: String((e && e.message) || e).slice(0, 80) });
+          const em = String((e && e.message) || e);
+          debug.push({ kdn: code, err: em.slice(0, 80) });
+          mark('快递鸟', false, em);
         }
       }
     }
@@ -476,7 +483,8 @@ module.exports = async function handler(req, res) {
         try {
           const kd = await queryKd100Official(no, com, phoneTail);
           debug.push({ kd100official: com, hit: !!(kd && kd.events.length) });
-          if (kd && kd.events.length) { info = kd; break; }
+          if (kd && kd.events.length) { info = kd; mark('快递100官方', true, ''); break; }
+          mark('快递100官方', false, '无数据(' + com + ')');
         } catch (e) {
           debug.push({ kd100official: com, err: String((e && e.message) || e).slice(0, 80) });
         }
@@ -499,7 +507,8 @@ module.exports = async function handler(req, res) {
         try {
           const kd = await queryKuaidi100(no, t, phoneTail);
           debug.push({ kd100: t, hit: !!(kd && kd.events.length) });
-          if (kd && kd.events.length) { info = kd; break; }
+          if (kd && kd.events.length) { info = kd; mark('快递100网页', true, ''); break; }
+          mark('快递100网页', false, '无数据(' + t + ')');
         } catch (e) {
           debug.push({ kd100: t, err: String((e && e.message) || e).slice(0, 100) });
         }
@@ -507,12 +516,13 @@ module.exports = async function handler(req, res) {
     }
 
     if (!info) {
-      return send(404, { ok: false, no, error: lastReason, debug });
+      return send(404, { ok: false, no, error: lastReason, tried, debug });
     }
 
     return send(200, {
       ok: true,
       no,
+      source: info.source || '',
       ...info,
       updatedAt: new Date().toISOString(),
     });

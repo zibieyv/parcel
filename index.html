@@ -838,14 +838,18 @@ function brandMismatch(text, type) {
     if (db.settings.token) url.searchParams.set('token', db.settings.token);
     const r = await fetch(url, { headers: { accept: 'application/json' } });
     const j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
-    if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    if (!j.ok) {
+      const err = new Error(j.error || `HTTP ${r.status}`);
+      err.tried = j.tried || [];
+      throw err;
+    }
     return j;
   }
 
   /** 把接口结果写进一条包裹（含取件码自动捡拾） */
   function applyTrack(it, j) {
     Object.assign(it, {
-      status: j.status, statusText: j.statusText, carrier: j.carrier,
+      status: j.status, statusText: j.statusText, carrier: j.carrier, source: j.source || it.source || '',
       latest: j.latest, latestTime: j.latestTime, events: j.events || [],
       updatedAt: j.updatedAt || new Date().toISOString(),
     });
@@ -864,7 +868,9 @@ function brandMismatch(text, type) {
       save(); render();
       toast(j.status === 'notfound' ? '还没轨迹，晚点再刷' : '已更新');
     } catch (err) {
-      toast('查询失败：' + err.message);
+      const chain = (err.tried || []).filter((t) => !t.ok).slice(0, 3)
+        .map((t) => t.provider + '：' + (t.reason || '无数据')).join('｜');
+      toast(chain ? '都查不到 → ' + chain : '查询失败：' + err.message);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '刷新轨迹'; }
     }
