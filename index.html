@@ -429,7 +429,7 @@ main{padding:14px 16px 0}
     items: [],
     groups: ['我的'],
     deleted: {},
-    settings: { base: location.origin, token: '', rooms: [], nickname: '', deviceId: '', members: {}, baiduUrl: 'https://pan.baidu.com/s/1WmPTGTfd5_UFzq4VnErjOg?pwd=7m8w' },
+    settings: { base: location.origin, token: 'uVUs1XDqZYk0JvHy6P7Oa3cdFfMi4btA', rooms: [], nickname: '', deviceId: '', members: {}, baiduUrl: 'https://pan.baidu.com/s/1WmPTGTfd5_UFzq4VnErjOg?pwd=7m8w' },
   };
   let db = load();
   dedupeByNo();
@@ -497,6 +497,7 @@ main{padding:14px 16px 0}
             st.rooms = [{ code: st.room, group: st.roomGroup || '', members: st.members || {} }];
           }
           st.rooms.forEach((r) => { if (!r.members) r.members = {}; });
+          if (!st.token) st.token = defaults.settings.token;
           if (!st.baiduUrl) st.baiduUrl = defaults.settings.baiduUrl;
           delete st.room; delete st.roomGroup;
           return st;
