@@ -417,6 +417,7 @@ module.exports = async function handler(req, res) {
 
     // 国内单号直接跳过 17TRACK：它对国内承运商要么没数据，要么匹配到别的单
     const domestic = isDomestic(no);
+    const force = String((req.query && req.query.force) || '').toLowerCase();
 
     // 先试无承运商（国际单号多半能自动识别）
     const tries = domestic ? [] : [null, ...candidates];
@@ -453,7 +454,7 @@ module.exports = async function handler(req, res) {
     }
 
     // 国内号优先走快递鸟（正规接口，带手机号不串号）
-    if (!info && domestic) {
+    if (!info && domestic && force !== 'kd100official' && force !== 'kd100web') {
       const codes = (forced ? [forced] : carrierCandidates(no)).map((c) => KDN_SHIPPER[c]).filter(Boolean);
       const list = codes.length ? codes : ['YZPY', 'YTO', 'ZTO', 'YD', 'STO', 'JTSD'];
       for (const code of [...new Set(list)].slice(0, 4)) {
