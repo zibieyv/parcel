@@ -684,6 +684,7 @@ main{padding:14px 16px 0}
           <div class="leftCol">
             <div class="t">${esc(when || '—')}</div>
             <div class="c">${esc(it.carrier || '')}</div>
+            ${it.suspect ? '<div class="c" style="color:#c4761a">⚠ 免费接口，可能串号</div>' : ''}
           </div>
           <div class="rightCol">${esc(it.latest || '暂无轨迹')}</div>
         </div>
@@ -867,6 +868,7 @@ function brandMismatch(text, type) {
   function applyTrack(it, j) {
     Object.assign(it, {
       status: j.status, statusText: j.statusText, carrier: j.carrier, source: j.source || it.source || '',
+      suspect: !!j.suspect,
       latest: j.latest, latestTime: j.latestTime, events: j.events || [],
       updatedAt: j.updatedAt || new Date().toISOString(),
     });
@@ -883,7 +885,7 @@ function brandMismatch(text, type) {
       const j = await queryTrack(it.no, it.carrierCode, it.phoneTail);
       applyTrack(it, j);
       save(); render();
-      toast(j.status === 'notfound' ? '还没轨迹，晚点再刷' : '已更新');
+      toast(j.suspect ? '已更新（免费接口，可能串号，核对一下）' : (j.status === 'notfound' ? '还没轨迹，晚点再刷' : '已更新'));
     } catch (err) {
       const chain = (err.tried || []).filter((t) => !t.ok).slice(0, 3)
         .map((t) => t.provider + '：' + (t.reason || '无数据')).join('｜');

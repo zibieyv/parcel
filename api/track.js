@@ -519,7 +519,8 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // 再退到快递100 网页接口（免费但会串号，见 webSafeNumber）
+    // 再退到快递100 网页接口（免费兜底，唯一能一直用的层）
+    // 它会串号，所以命中后按「号码格式跟承运商对不对得上」打 suspect 标，前端提示用户核对
     if (!info && !onlyOfficial) {
       const types = (forced ? [forced] : carrierCandidates(no)).map((c) => KD100_TYPE[c]).filter(Boolean);
       const tryTypes = types.length ? types : ['yunda', 'zhongtong', 'yuantong', 'shentong', 'youzhengguonei'];
@@ -531,20 +532,22 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      let skipped = 0;
       for (const t of tryTypes.slice(0, 5)) {
-        // 只有 force=kd100web 是人工点名要试，才允许越过号段校验
-        if (!onlyWeb && !webSafeNumber(no, t)) { skipped += 1; continue; }
         try {
           const kd = await queryKuaidi100(no, t, phoneTail);
           debug.push({ kd100: t, hit: !!(kd && kd.events.length) });
-          if (kd && kd.events.length) { info = kd; mark('快递100网页', true, ''); break; }
+          if (kd && kd.events.length) {
+            // 号段对不上（纯数字号、或前缀不是这家快递的）就当可疑结果，仍返回但标记
+            kd.suspect = onlyWeb ? false : !webSafeNumber(no, t);
+            info = kd;
+            mark('快递100网页', true, kd.suspect ? '已查到，但号段对不上，标注可疑' : '');
+            break;
+          }
           mark('快递100网页', false, '无数据(' + t + ')');
         } catch (e) {
           debug.push({ kd100: t, err: String((e && e.message) || e).slice(0, 100) });
         }
       }
-      if (skipped) mark('快递100网页', false, `号码不在号段内，跳过 ${skipped} 次（防串号）`);
     }
 
     if (!info) {
@@ -559,6 +562,7 @@ module.exports = async function handler(req, res) {
       no,
       source: info.source || '',
       ...info,
+      suspect: !!info.suspect,
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {
