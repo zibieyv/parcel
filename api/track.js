@@ -440,91 +440,54 @@ module.exports = async function handler(req, res) {
     const tried = [];
     const mark = (provider, ok, reason) => tried.push({ provider, ok, reason: String(reason || '').slice(0, 60) });
 
-    // 国内单号直接跳过 17TRACK：它对国内承运商要么没数据，要么匹配到别的单
+    // 国际单号走 17TRACK；国内单号跳过它（它会张冠李戴）
     const domestic = isDomestic(no);
     const force = String((req.query && req.query.force) || '').toLowerCase();
-    // force 是调试开关，必须真的只走那一层，否则拿到的数据没法归因
     const onlyOfficial = force === 'kd100official';
     const onlyWeb = force === 'kd100web';
 
-    // 先试无承运商（国际单号多半能自动识别）
-    const tries = (domestic || onlyOfficial || onlyWeb) ? [] : [null, ...candidates];
-    for (const carrier of tries) {
-      let regErr = '';
-      try {
-        const payload = carrier ? [{ number: no, carrier }] : [{ number: no }];
-        await call17track('/register', payload, token);
-      } catch (e) {
-        regErr = String((e && e.message) || e).slice(0, 120);
-      }
-
-      let data;
-      try {
-        data = await call17track('/gettrackinfo', [{ number: no }], token);
-      } catch (e) {
-        lastReason = String((e && e.message) || e).slice(0, 120);
-        continue;
-      }
-
-      const accepted = data.accepted || [];
-      const rejected = data.rejected || [];
-      const hit = accepted.find((a) => normalizeNo(a.number) === no) || accepted[0];
-      const got = pickInfo(hit);
-
-      if (got && (got.events.length > 0 || got.code > 0)) {
-        info = got;
-        mark('17TRACK', true, '');
-        break;
-      }
-      mark('17TRACK', false, carrier ? '无数据(' + carrier + ')' : '无数据');
-
-      const rej = rejected.find((r) => normalizeNo(r.number) === no);
-      if (rej && rej.reason) lastReason = String(rej.reason);
-      debug.push({ carrier: carrier || 'auto', regErr, accepted: accepted.length, rejected: rejected.length, reason: rej && rej.reason, code: got ? got.code : null });
-    }
-
-    // 国内号优先走快递鸟（正规接口，带手机号不串号）
-    if (!info && domestic && force !== 'kd100official' && force !== 'kd100web') {
-      const codes = (forced ? [forced] : carrierCandidates(no)).map((c) => KDN_SHIPPER[c]).filter(Boolean);
-      const list = codes.length ? codes : ['YZPY', 'YTO', 'ZTO', 'YD', 'STO', 'JTSD'];
-      for (const code of [...new Set(list)].slice(0, 4)) {
+    if (!domestic && !onlyOfficial && !onlyWeb) {
+      const tries = [null, ...candidates];
+      for (const carrier of tries) {
+        let regErr = '';
         try {
-          const kdn = await queryKdn(no, code, phoneTail);
-          debug.push({ kdn: code, hit: !!(kdn && kdn.events.length) });
-          if (kdn && kdn.events.length) { info = kdn; mark('快递鸟', true, ''); break; }
-          mark('快递鸟', false, '无数据(' + code + ')');
+          const payload = carrier ? [{ number: no, carrier }] : [{ number: no }];
+          await call17track('/register', payload, token);
         } catch (e) {
-          const em = String((e && e.message) || e);
-          debug.push({ kdn: code, err: em.slice(0, 80) });
-          mark('快递鸟', false, em);
-          // 账号级错误（套餐到期/额度用完）换承运商也没用，直接跳出
-          if (/套餐|额度|余额|权限|次数/.test(em)) break;
+          regErr = String((e && e.message) || e).slice(0, 120);
         }
-      }
-    }
 
-    // 快递鸟没有（或额度用完）时，用快递100 官方 API
-    if (!info && domestic && !onlyWeb) {
-      const codes = (forced ? [forced] : carrierCandidates(no)).filter((c) => KD100_TYPE[c]);
-      const list = codes.length ? codes : ['youzhengguonei', 'yuantong', 'zhongtong', 'yunda'];
-      for (const com of [...new Set(list)].slice(0, 3)) {
+        let data;
         try {
-          const kd = await queryKd100Official(no, com, phoneTail);
-          debug.push({ kd100official: com, hit: !!(kd && kd.events.length) });
-          if (kd && kd.events.length) { info = kd; mark('快递100官方', true, ''); break; }
-          mark('快递100官方', false, '无数据(' + com + ')');
+          data = await call17track('/gettrackinfo', [{ number: no }], token);
         } catch (e) {
-          debug.push({ kd100official: com, err: String((e && e.message) || e).slice(0, 80) });
+          lastReason = String((e && e.message) || e).slice(0, 120);
+          continue;
         }
+
+        const accepted = data.accepted || [];
+        const rejected = data.rejected || [];
+        const hit = accepted.find((a) => normalizeNo(a.number) === no) || accepted[0];
+        const got = pickInfo(hit);
+
+        if (got && (got.events.length > 0 || got.code > 0)) {
+          info = got;
+          mark('17TRACK', true, '');
+          break;
+        }
+        mark('17TRACK', false, carrier ? '无数据(' + carrier + ')' : '无数据');
+
+        const rej = rejected.find((r) => normalizeNo(r.number) === no);
+        if (rej && rej.reason) lastReason = String(rej.reason);
+        debug.push({ carrier: carrier || 'auto', regErr, accepted: accepted.length, rejected: rejected.length, reason: rej && rej.reason, code: got ? got.code : null });
       }
     }
 
-    // 再退到快递100 网页接口（免费兜底，唯一能一直用的层）
-    // 它会串号，所以命中后按「号码格式跟承运商对不对得上」打 suspect 标，前端提示用户核对
-    if (!info && !onlyOfficial) {
+    // 国内第 1 层：快递100 网页接口（免费、不限量）。它会串号，
+    // 所以命中后按「号码格式跟承运商对不对得上」打 suspect 标
+    if (!info && domestic && !onlyOfficial) {
       const types = (forced ? [forced] : carrierCandidates(no)).map((c) => KD100_TYPE[c]).filter(Boolean);
       const tryTypes = types.length ? types : ['yunda', 'zhongtong', 'yuantong', 'shentong', 'youzhengguonei'];
-      // 指定了承运商但查不到时，自动候选也试一遍
       if (forced) {
         for (const t of (carrierCandidates(no).map((c) => KD100_TYPE[c]).filter(Boolean)).slice(0, 4)) {
           if (tryTypes.includes(t)) continue;
@@ -537,7 +500,6 @@ module.exports = async function handler(req, res) {
           const kd = await queryKuaidi100(no, t, phoneTail);
           debug.push({ kd100: t, hit: !!(kd && kd.events.length) });
           if (kd && kd.events.length) {
-            // 号段对不上（纯数字号、或前缀不是这家快递的）就当可疑结果，仍返回但标记
             kd.suspect = onlyWeb ? false : !webSafeNumber(no, t);
             info = kd;
             mark('快递100网页', true, kd.suspect ? '已查到，但号段对不上，标注可疑' : '');
@@ -546,6 +508,47 @@ module.exports = async function handler(req, res) {
           mark('快递100网页', false, '无数据(' + t + ')');
         } catch (e) {
           debug.push({ kd100: t, err: String((e && e.message) || e).slice(0, 100) });
+        }
+      }
+    }
+
+    // 国内第 2 层：免费层没结果，或结果可疑（串号）→ 用快递100 官方 API 核对
+    // 正式 API 只有 100 次/2 年，所以只在必要时才用
+    if (domestic && !onlyWeb && (!info || info.suspect)) {
+      const codes = (forced ? [forced] : carrierCandidates(no)).filter((c) => KD100_TYPE[c]);
+      const list = codes.length ? codes : ['youzhengguonei', 'yuantong', 'zhongtong', 'yunda'];
+      for (const com of [...new Set(list)].slice(0, 3)) {
+        try {
+          const kd = await queryKd100Official(no, com, phoneTail);
+          debug.push({ kd100official: com, hit: !!(kd && kd.events.length) });
+          if (kd && kd.events.length) {
+            kd.suspect = false;      // 官方结果可信，覆盖掉免费层的可疑标记
+            info = kd;
+            mark('快递100官方', true, '');
+            break;
+          }
+          mark('快递100官方', false, '无数据(' + com + ')');
+        } catch (e) {
+          debug.push({ kd100official: com, err: String((e && e.message) || e).slice(0, 80) });
+        }
+      }
+    }
+
+    // 国内第 3 层：快递鸟。7 天试用已过，默认关闭；KDNIAO_ENABLED=1 才启用
+    if (!info && domestic && !onlyOfficial && !onlyWeb && process.env.KDNIAO_ENABLED === '1') {
+      const codes = (forced ? [forced] : carrierCandidates(no)).map((c) => KDN_SHIPPER[c]).filter(Boolean);
+      const list = codes.length ? codes : ['YZPY', 'YTO', 'ZTO', 'YD', 'STO', 'JTSD'];
+      for (const code of [...new Set(list)].slice(0, 4)) {
+        try {
+          const kdn = await queryKdn(no, code, phoneTail);
+          debug.push({ kdn: code, hit: !!(kdn && kdn.events.length) });
+          if (kdn && kdn.events.length) { info = kdn; mark('快递鸟', true, ''); break; }
+          mark('快递鸟', false, '无数据(' + code + ')');
+        } catch (e) {
+          const em = String((e && e.message) || e);
+          debug.push({ kdn: code, err: em.slice(0, 80) });
+          mark('快递鸟', false, em);
+          if (/套餐|额度|余额|权限|次数/.test(em)) break;
         }
       }
     }

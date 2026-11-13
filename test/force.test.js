@@ -7,6 +7,7 @@ process.env.APP_TOKEN = 't';
 process.env.TRACK17_TOKEN = 'x';
 process.env.KDNIAO_ID = '1';
 process.env.KDNIAO_KEY = 'k';
+process.env.KDNIAO_ENABLED = '1';
 process.env.KUAIDI100_CUSTOMER = 'c';
 process.env.KUAIDI100_KEY = 'k';
 
@@ -82,9 +83,15 @@ function check(name, cond, extra) {
   r = await run({ no: 'YT1234567890123' });
   check('默认链路 字母号可用免费层且可信', r.code === 200 && r.body.source === 'kuaidi100' && r.body.suspect === false, r.body);
 
-  // 5. 快递鸟账号级错误只试一次就跳出
+  // 4.5 可疑结果（纯数字号）应触发官方层核对
   calls.length = 0;
-  await run({ no: '1234567890123' });
+  r = await run({ no: '1234567890123' });
+  check('可疑结果会升级到官方层核对', hit('poll.kuaidi100.com'), calls);
+
+  // 5. 快递鸟账号级错误只试一次就跳出
+  // 用极兔号：免费层和官方层都没有数据，才会轮到快递鸟
+  calls.length = 0;
+  await run({ no: 'JT1234567890123' });
   const kdnCalls = calls.filter((u) => u.includes('kdniao')).length;
   check('快递鸟账号级错误只尝试 1 次', kdnCalls === 1, kdnCalls);
 
