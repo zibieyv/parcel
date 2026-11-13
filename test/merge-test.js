@@ -35,9 +35,13 @@ assert.strictEqual(out.items[0].status, 'delivered');
 console.log('✓ 旧数据不会回滚状态');
 
 // 4. 墓碑删除，且不会被重新加回来
+// 用相对时间：墓碑超过 TOMBSTONE_DAYS(30 天) 会被清理，写死日期会让这条用例随时间失效
+const baseTs = new Date(Date.now() - 3 * 864e5).toISOString();
+const incTs = new Date(Date.now() - 2 * 864e5).toISOString();
+const tombTs = new Date(Date.now() - 1 * 864e5).toISOString();
 out = mergeState(
-  { items: [A('a', '2026-10-01T00:00:00Z')], rev: 1 },
-  { items: [A('a', '2026-10-09T00:00:00Z')], deleted: { a: '2026-10-10T00:00:00Z' } }
+  { items: [A('a', baseTs)], rev: 1 },
+  { items: [A('a', incTs)], deleted: { a: tombTs } }
 );
 assert.strictEqual(out.items.length, 0);
 assert.ok(out.deleted.a);
