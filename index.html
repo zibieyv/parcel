@@ -775,11 +775,26 @@ const KD_BRANDS = {
   shentong: '\u7533\u901a', shunfeng: '\u987a\u4e30', jtexpress: '\u6781\u5154',
   youzhengguonei: '\u90ae\u653f', ems: 'EMS', jd: '\u4eac\u4e1c',
 };
+// 快递100 网页接口会拿别人的件冒充，只有号码自带该快递字母前缀时才敢用
+const WEB_SAFE = {
+  yuantong: /^YT\d{10,}$/,
+  zhongtong: /^ZT\d{10,}$/,
+  yunda: /^YD\d{10,}$/,
+  jtexpress: /^JT\d{10,}$/,
+  shunfeng: /^SF\d{10,}$/,
+  jd: /^JD[A-Z0-9]{10,}$/,
+  youzhengguonei: /^[A-Z]{2}\d{9}[A-Z]{2}$/,
+  ems: /^[A-Z]{2}\d{9}[A-Z]{2}$/,
+};
+function webSafeNumber(no, type) {
+  const re = WEB_SAFE[type];
+  return re ? re.test(String(no || '').toUpperCase()) : false;
+}
 function brandMismatch(text, type) {
   const s = String(text || '');
-  for (const k of Object.keys(BRANDS)) {
+  for (const k of Object.keys(KD_BRANDS)) {
     if (k === type) continue;
-    if (s.includes(KD_KD_BRANDS[k])) return true;
+    if (s.includes(KD_BRANDS[k])) return true;
   }
   return false;
 }
@@ -788,6 +803,8 @@ function brandMismatch(text, type) {
     const httpGet = window.Native && window.Native.httpGet;
     if (!httpGet) return null;
     for (const t of types) {
+      // 纯数字单号在网页接口上最容易串号，交给服务器走官方层
+      if (!webSafeNumber(no, t)) continue;
       let body = '';
       try { body = httpGet(kdUrl(no, t, phone)); } catch (e) { continue; }
       if (!body) continue;
