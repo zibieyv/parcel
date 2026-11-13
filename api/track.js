@@ -306,6 +306,23 @@ function kdnSign(json, key) {
   return Buffer.from(hex, 'utf8').toString('base64');
 }
 
+/** 免费网页接口会拿别人的件冒充（实测：随便一个数字号也能查出西安的韵达件），
+ *  只有「号码本身就带该快递字母前缀」时才敢用，纯数字一律不走这层。 */
+const WEB_SAFE = {
+  yuantong: /^YT\d{10,}$/,
+  zhongtong: /^ZT\d{10,}$/,
+  yunda: /^YD\d{10,}$/,
+  jtexpress: /^JT\d{10,}$/,
+  shunfeng: /^SF\d{10,}$/,
+  jd: /^JD[A-Z0-9]{10,}$/,
+  youzhengguonei: /^[A-Z]{2}\d{9}[A-Z]{2}$/,
+  ems: /^[A-Z]{2}\d{9}[A-Z]{2}$/,
+};
+function webSafeNumber(no, type) {
+  const re = WEB_SAFE[type];
+  return re ? re.test(String(no || '').toUpperCase()) : false;
+}
+
 async function queryKdn(no, shipperCode, phone) {
   const id = process.env.KDNIAO_ID;
   const key = process.env.KDNIAO_KEY;
@@ -331,7 +348,13 @@ async function queryKdn(no, shipperCode, phone) {
   const text = await res.text();
   let json;
   try { json = JSON.parse(text); } catch { return null; }
-  if (!json.Success || !Array.isArray(json.Traces) || !json.Traces.length) return null;
+  if (!json.Success) {
+    // 套餐到期/额度用完这类账号级错误，换承运商再试也是白搭
+    const why = String(json.Reason || json.reason || '');
+    if (/套餐|额度|余额|次数|权限|到期|过期/.test(why)) throw new Error('快递鸟：' + why.slice(0, 30));
+    return null;
+  }
+  if (!Array.isArray(json.Traces) || !json.Traces.length) return null;
 
   const st = KDN_STATE[Number(json.State)] || [20, 'in_transit'];
   const events = json.Traces.map((t) => ({
@@ -420,9 +443,12 @@ module.exports = async function handler(req, res) {
     // 国内单号直接跳过 17TRACK：它对国内承运商要么没数据，要么匹配到别的单
     const domestic = isDomestic(no);
     const force = String((req.query && req.query.force) || '').toLowerCase();
+    // force 是调试开关，必须真的只走那一层，否则拿到的数据没法归因
+    const onlyOfficial = force === 'kd100official';
+    const onlyWeb = force === 'kd100web';
 
     // 先试无承运商（国际单号多半能自动识别）
-    const tries = domestic ? [] : [null, ...candidates];
+    const tries = (domestic || onlyOfficial || onlyWeb) ? [] : [null, ...candidates];
     for (const carrier of tries) {
       let regErr = '';
       try {
@@ -471,12 +497,14 @@ module.exports = async function handler(req, res) {
           const em = String((e && e.message) || e);
           debug.push({ kdn: code, err: em.slice(0, 80) });
           mark('快递鸟', false, em);
+          // 账号级错误（套餐到期/额度用完）换承运商也没用，直接跳出
+          if (/套餐|额度|余额|权限|次数/.test(em)) break;
         }
       }
     }
 
     // 快递鸟没有（或额度用完）时，用快递100 官方 API
-    if (!info && domestic) {
+    if (!info && domestic && !onlyWeb) {
       const codes = (forced ? [forced] : carrierCandidates(no)).filter((c) => KD100_TYPE[c]);
       const list = codes.length ? codes : ['youzhengguonei', 'yuantong', 'zhongtong', 'yunda'];
       for (const com of [...new Set(list)].slice(0, 3)) {
@@ -491,8 +519,8 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // 再退到快递100 网页接口
-    if (!info) {
+    // 再退到快递100 网页接口（免费但会串号，见 webSafeNumber）
+    if (!info && !onlyOfficial) {
       const types = (forced ? [forced] : carrierCandidates(no)).map((c) => KD100_TYPE[c]).filter(Boolean);
       const tryTypes = types.length ? types : ['yunda', 'zhongtong', 'yuantong', 'shentong', 'youzhengguonei'];
       // 指定了承运商但查不到时，自动候选也试一遍
@@ -503,7 +531,10 @@ module.exports = async function handler(req, res) {
         }
       }
 
+      let skipped = 0;
       for (const t of tryTypes.slice(0, 5)) {
+        // 只有 force=kd100web 是人工点名要试，才允许越过号段校验
+        if (!onlyWeb && !webSafeNumber(no, t)) { skipped += 1; continue; }
         try {
           const kd = await queryKuaidi100(no, t, phoneTail);
           debug.push({ kd100: t, hit: !!(kd && kd.events.length) });
@@ -513,10 +544,14 @@ module.exports = async function handler(req, res) {
           debug.push({ kd100: t, err: String((e && e.message) || e).slice(0, 100) });
         }
       }
+      if (skipped) mark('快递100网页', false, `号码不在号段内，跳过 ${skipped} 次（防串号）`);
     }
 
     if (!info) {
-      return send(404, { ok: false, no, error: lastReason, tried, debug });
+      const hint = onlyOfficial ? '（force=kd100official：只走了快递100官方）'
+        : onlyWeb ? '（force=kd100web：只走了快递100网页）'
+        : '';
+      return send(404, { ok: false, no, error: lastReason + hint, tried, debug });
     }
 
     return send(200, {
