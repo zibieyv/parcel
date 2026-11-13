@@ -220,6 +220,39 @@ async function queryKuaidi100(no, type, phone) {
 
 
 
+
+/* ---------------- 结果缓存（Upstash / Vercel KV），省快递100官方额度 ---------------- */
+const KV_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || process.env.STORAGE_URL || '';
+const KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || process.env.STORAGE_TOKEN || '';
+const CACHE_TTL = 1800;
+
+async function cacheGet(key) {
+  if (!KV_URL || !KV_TOKEN) return null;
+  try {
+    const r = await fetch(`${KV_URL}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${KV_TOKEN}` },
+    });
+    const j = await r.json();
+    if (!j || j.result == null) return null;
+    return JSON.parse(j.result);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function cacheSet(key, value) {
+  if (!KV_URL || !KV_TOKEN) return;
+  try {
+    await fetch(`${KV_URL}/set/${encodeURIComponent(key)}?EX=${CACHE_TTL}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'text/plain' },
+      body: JSON.stringify(value),
+    });
+  } catch (e) {
+    /* 缓存失败不影响主流程 */
+  }
+}
+
 /* ---------------- 快递100 官方实时查询（正式API，100次/2年） ---------------- */
 const KD100_OFFICIAL_STATE = {
   0: [20, 'in_transit'],
@@ -390,6 +423,7 @@ function pickInfo(entry) {
 
   const st = statusOf(info.latest_status?.status);
   return {
+    source: '17track',
     code: st.code,
     status: st.key,
     statusText: info.latest_status?.sub_status_descr || STATUS_TEXT[st.code] || '',
@@ -515,6 +549,14 @@ module.exports = async function handler(req, res) {
     // 国内第 2 层：免费层没结果，或结果可疑（串号）→ 用快递100 官方 API 核对
     // 正式 API 只有 100 次/2 年，所以只在必要时才用
     if (domestic && !onlyWeb && (!info || info.suspect)) {
+      const cached = await cacheGet('parcel:track:' + no);
+      if (cached && Array.isArray(cached.events) && cached.events.length) {
+        info = { ...cached, suspect: false, cached: true };
+        mark('快递100官方缓存', true, '');
+      }
+    }
+
+    if (domestic && !onlyWeb && (!info || info.suspect)) {
       const codes = (forced ? [forced] : carrierCandidates(no)).filter((c) => KD100_TYPE[c]);
       const list = codes.length ? codes : ['youzhengguonei', 'yuantong', 'zhongtong', 'yunda'];
       for (const com of [...new Set(list)].slice(0, 3)) {
@@ -525,6 +567,7 @@ module.exports = async function handler(req, res) {
             kd.suspect = false;      // 官方结果可信，覆盖掉免费层的可疑标记
             info = kd;
             mark('快递100官方', true, '');
+            await cacheSet('parcel:track:' + no, kd);
             break;
           }
           mark('快递100官方', false, '无数据(' + com + ')');
@@ -564,6 +607,7 @@ module.exports = async function handler(req, res) {
       ok: true,
       no,
       source: info.source || '',
+      tried,
       ...info,
       suspect: !!info.suspect,
       updatedAt: new Date().toISOString(),
