@@ -7,12 +7,19 @@ import sys
 
 from PIL import Image, ImageDraw
 
-SRC_DEFAULT = (
-    r"D:\Ruan Jian\DeepSeek\data\dsh-home\attachments\v1\objects\bd"
-    r"\bdde6ed517c213c65038eab7ebe0a45b74acfaaf23d6962f87d31d5770f20b41"
+# 2026-11-15：仓库已迁到 DeepSeekData，不再写死旧的 workspace\parcel 绝对路径。
+# 一律相对本脚本解析，以后再搬目录也不用改代码；源图优先按 DSH_HOME 定位。
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_ROOT = os.environ.get("DSH_HOME") or os.path.join(
+    os.path.dirname(os.path.dirname(ROOT)), "dsh-home"
 )
-RES = r"D:\Ruan Jian\DeepSeek\workspace\parcel\android\app\src\main\res"
-OUT_BIG = r"D:\Ruan Jian\DeepSeek\workspace\parcel\icon-512.png"
+SRC_DEFAULT = os.path.join(
+    DATA_ROOT, "attachments", "v1", "objects", "bd",
+    "bdde6ed517c213c65038eab7ebe0a45b74acfaaf23d6962f87d31d5770f20b41",
+)
+RES = os.path.join(ROOT, "android", "app", "src", "main", "res")
+OUT_BIG = os.path.join(ROOT, "icon-512.png")
+OUT_SRC = os.path.join(ROOT, "icon-source-1024.png")
 
 # 要抹掉的区域（原图坐标）：左下角 "1-Flash 1017 High" 水印
 CLEAN_RECTS = [(0, 256, 138, 295)]
@@ -52,10 +59,14 @@ def emit(img):
 
 def main():
     src = sys.argv[1] if len(sys.argv) > 1 else SRC_DEFAULT
+    if not os.path.isfile(src):
+        raise SystemExit(
+            "源图不存在：%s\n请用命令行传入：python scripts/icon_from_image.py <源图路径>" % src
+        )
     im = Image.open(src).convert("RGB")
     # 原图原样使用，不做任何清理（用户要求保留截图里的细节）
     im = im.resize((1024, 1024), Image.LANCZOS)
-    im.save(r"D:\Ruan Jian\DeepSeek\workspace\parcel\icon-source-1024.png")
+    im.save(OUT_SRC)
     emit(im)
 
 

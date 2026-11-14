@@ -2,7 +2,10 @@
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-OUT = r"D:\Ruan Jian\DeepSeek\workspace\parcel\android\app\src\main\res"
+# 2026-11-15：改为相对本脚本解析，不再写死旧的 workspace\parcel 绝对路径。
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, "android", "app", "src", "main", "res")
+OUT_BIG = os.path.join(ROOT, "icon-512.png")
 S = 1024  # 先大图再缩
 
 BG = (20, 23, 31)
@@ -87,7 +90,7 @@ def emit(img):
         round_img.paste(small, (0, 0), mask)
         round_img.save(os.path.join(path, "ic_launcher_round.png"))
     big = img.resize((512, 512), Image.LANCZOS)
-    big.save(r"D:\Ruan Jian\DeepSeek\workspace\parcel\icon-512.png")
+    big.save(OUT_BIG)
     print("icons written")
 
 
