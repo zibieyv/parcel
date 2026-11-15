@@ -98,18 +98,23 @@ code{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius
     <img class="icon" src="icon-192.png" alt="鱼盯图标">
     <div>
       <h1>鱼盯</h1>
-      <div class="sub">闲鱼目标用户上线观察 · 无障碍读屏 · 上线响铃 + 语音播报</div>
+      <div class="sub">闲鱼目标用户上线观察 · 无障碍读屏 · 默认静默通知，声音可选</div>
       <div class="badges">
         <span class="badge">Android 8.0+</span>
         <span class="badge">127 KB</span>
         <span class="badge">不 root</span>
+        <span class="badge">默认静默</span>
         <span class="badge">本地运行</span>
       </div>
-      <a class="btn" href="yuding-1.0.4.apk" download="鱼盯-1.0.4.apk">下载 APK · 1.0.4</a>
+      <a class="btn" href="yuding-1.0.5.apk" download="鱼盯-1.0.5.apk">下载 APK · 1.0.5</a>
       <a class="btn ghost" href="#install" style="margin-left:8px">怎么装</a>
-      <div class="meta">SHA-256：F7096D7D69430D9731F0C2140176AECFC25B2EB30A2729D7DE8DBF70C8491B9A</div>
+      <div class="meta">SHA-256：AF494922D056163D1F4348F3800AEBC7C3BD5AB11844ABACE65E2BBB1E421DEE</div>
     </div>
   </section>
+
+  <div class="note">
+    <b>默认静默提醒：</b>对方上线只发一条通知，不响铃、不振动、不播报；想听声音再去设置里关掉「静默提醒」。
+  </div>
 
   <div class="note">
     <b>微信里打不开下载？</b> 点右上角「…」→ 在浏览器打开，再点下载。安卓会提示「未知来源/外部来源应用」，允许即可。
@@ -121,8 +126,8 @@ code{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius
     <div class="kv">
       <div><label>自动轮询</label><b>按顺序打开目标主页，读屏 + 下拉刷新，循环</b></div>
       <div><label>手动驻留</label><b>你自己停在对方页面，App 只负责盯</b></div>
-      <div><label>发现上线</label><b>高优先级通知 + 闹钟铃声 + 振动 + 语音</b></div>
-      <div><label>运行状态</label><b>左上角悬浮条显示第几轮 / 当前动作</b></div>
+      <div><label>发现上线</label><b>默认只发通知；响铃/振动/语音在设置里开</b></div>
+      <div><label>小窗只读</label><b>不点屏幕；闲鱼露在屏幕上就能读，视频小窗盖着也行</b></div>
     </div>
   </div>
 
@@ -153,12 +158,13 @@ code{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius
   <div class="card">
     <h2>已知限制</h2>
     <p>只认文字，不认绿色圆点；没有截图 OCR 兜底（长时间识屏费电，当前版本走读屏）。自动跳页依赖无障碍，ColorOS 重启/清后台后可能自动关闭，重新打开一次即可。观察期间屏幕会保持常亮；锁屏后读不到。不能自动发消息 / 自动拍下。<br><br>
+    “手动 / 小窗只读”模式不点屏幕，但要求闲鱼窗口还露在屏幕上（视频小窗/分屏可以；游戏全屏时闲鱼不可见，就读不到）。<br><br>
     只有点「解析短链」时会联网 GET 一次 <code>m.tb.cn</code>，不传本机数据；正常观察不联网。</p>
   </div>
 
   <div class="card">
     <h2>版本</h2>
-    <p><b>1.0.4</b>：左上角悬浮状态条（第 N 轮 + 当前动作）；1.0.3：短链解析；1.0.2：短链保存；1.0.1：修重复提醒、黑屏空启服务。<br>
+    <p><b>1.0.5</b>：默认静默提醒（不响铃/振动/播报）；「手动/小窗只读」可读被视频小窗盖住的闲鱼窗口；1.0.4：悬浮状态条；1.0.3：短链解析；1.0.2：短链保存；1.0.1：修重复提醒。<br>
     包名 <code>com.zibieyv.yuding</code>，versionCode 5，minSdk 26 / target 34，v2 签名。</p>
   </div>
 
